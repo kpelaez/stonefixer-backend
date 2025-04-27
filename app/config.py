@@ -8,14 +8,14 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str;
     SECRET_KEY: str;
-    ALGORITH: str;
+    ALGORITHM: str;
     ACCESS_TOKEN_EXPIRE_MINUTES: int;
     DEBUG: bool;
     APP_NAME: str;
 
 settings = Settings(
     DATABASE_URL=os.getenv("DATABASE_URL","sqlite///./sql_app.db"),
-    ALGORITH="HS256",
+    ALGORITHM="HS256",
     ACCESS_TOKEN_EXPIRE_MINUTES=30,
     DEBUG= os.getenv("DEBUG", "False") == "True",
     APP_NAME="Auth Service"
