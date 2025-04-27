@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UserBase(SQLModel):
     email: str = Field(index=True, unique=True)
@@ -8,9 +8,9 @@ class UserBase(SQLModel):
 
 class User(UserBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    hashed_password = str
-    created_at: datetime = Field(default_factory=datetime.timestamp())
-    updated_at: datetime = Field(default_factory=datetime.timestamp())
+    hashed_password: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserCreate(UserBase):
     password: str
