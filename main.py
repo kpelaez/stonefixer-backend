@@ -1,57 +1,65 @@
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlmodel import Session, select
 from datetime import timedelta
 from jose import JWTError, jwt
 
-from app.db.database import engine, get_db, create_db_and_tables
+from app.db.database import get_db, create_db_and_tables
 from app.models.user import User, UserCreate, UserRead, UserLogin
 from app.services.auth import (
     authenticate_user,
     create_access_token,
-    get_password_hash,
     get_user_by_email,
-    create_user
+    create_user,
+    verify_token
 )
 from app.config import settings
+
 # Crear tablas
 create_db_and_tables()
 
 app = FastAPI(title=settings.APP_NAME)
 
-# Configurar CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción, especifica las URLs exactas
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# Esquema OAuth2 para extraer el token de la cabecera de autorización
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No se pudo validar las credenciales",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
+    """Obtiene el usuario actual a partir del token JWT"""
+    # Verificar el token
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de acceso inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
+    # Extraer el email del payload
+    email = payload.get("sub")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token con formato inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Buscar el usuario en la base de datos
     user = get_user_by_email(db, email)
-    if user is None:
-        raise credentials_exception
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario no encontrado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     return user
 
+# Endpoint para login
 @app.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Endpoint para iniciar sesión y obtener un token JWT"""
+
+    # Autenticar al usuario
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -59,23 +67,33 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             detail="Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
+    
+    # Crear y devolver el token
+    access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/register", response_model=UserRead)
-async def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = get_user_by_email(db, user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email ya registrado")
-    return create_user(db, user)
 
+# Endpoint para registro
+@app.post("/register", response_model=UserRead)
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Endpoint para registrar un nuevo usuario"""
+
+    # Verificar si el usuario ya existe
+    if get_user_by_email(db, user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El email ya está registrado"
+        )
+    # Crear y devolver el usuario
+    return create_user(db, user_data)
+
+# Endpoint protegido de ejemplo
 @app.get("/users/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
+    """Endpoint para obtener información del usuario actual"""
     return current_user
 
+# Endpoint de ingreso al servidor ¡¡Borrar Luego!!
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido al servicio de autenticación"}
