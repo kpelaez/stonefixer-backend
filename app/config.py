@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
 settings = Settings(
     DATABASE_URL=os.getenv("DATABASE_URL","sqlite///./sql_app.db"),
+    SECRET_KEY='Harumi2023',
     ALGORITHM="HS256",
     ACCESS_TOKEN_EXPIRE_MINUTES=30,
     DEBUG= os.getenv("DEBUG", "False") == "True",

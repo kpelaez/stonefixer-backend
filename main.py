@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from datetime import timedelta
 from jose import JWTError, jwt
@@ -15,10 +16,20 @@ from app.services.auth import (
 )
 from app.config import settings
 
+
 # Crear tablas
 create_db_and_tables()
 
 app = FastAPI(title=settings.APP_NAME)
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # URL de tu frontend (ajustar según sea necesario)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Esquema OAuth2 para extraer el token de la cabecera de autorización
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
