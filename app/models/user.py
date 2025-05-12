@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import List
 from datetime import datetime, timezone
-from role import UserRole
+from app.models.role import UserRole
 
 class UserBase(SQLModel):
     email: str = Field(index=True, unique=True)
