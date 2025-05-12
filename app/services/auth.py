@@ -3,7 +3,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlmodel import Session, select
 from app.config import settings
-from app.models.user import User, UserCreate
+from app.models.user import User, UserCreate, UserRead
 from app.models.role import UserRole, Role
 from typing import List
 
@@ -69,7 +69,14 @@ def create_user(db: Session, user_create: UserCreate):
     
     db.commit()
     db.refresh(db_user)
-    return db_user
+    return UserRead(
+        id=db_user.id,
+        email=db_user.email,
+        full_name=db_user.full_name,
+        is_active=db_user.is_active,
+        created_at=db_user.created_at,
+        roles=[ur.role for ur in db_user.roles]  # Extraer solo el string del rol
+    )
 
 
 # Funciones de manejo de Roles
@@ -82,12 +89,22 @@ def get_user_roles(db: Session, user_id: int) -> List[str]:
     return [ur.role for ur in user_roles]
 
 
-def has_role(db: Session, user_id: int, role: str) -> List[str]:
-    """Verificar si un usuario tiene un rol especifico"""
-    statement = select(UserRole).where(
-        (UserRole.user_id == user_id) & (UserRole.role == role)
-    )
-    return db.exec(statement).first() is not None
+def has_role(user: User, role: str) -> bool:
+    """Verificar si un usuario tiene un rol específico"""
+    # Si tenemos los roles en _roles (de get_current_user)
+    if hasattr(user, "_roles"):
+        return role in user._roles
+    
+    # Si no, obtener de la base de datos (relación User.roles)
+    if user.roles:
+        return any(user_role.role == role for user_role in user.roles)
+    
+    return False
+
+def has_any_role(user: User, roles: List[str]) -> bool:
+    """Verificar si un usuario tiene alguno de los roles especificados"""
+    return any(has_role(user, role) for role in roles)
+
 
 
 def add_role_to_user(db: Session, user_id: int, role: str) -> bool:
@@ -121,6 +138,19 @@ def remove_role_from_user(db: Session, user_id: int, role: str) -> bool:
     db.delete(user_role)
     db.commit()
     return True
+
+
+# Función auxiliar para convertir User a UserRead
+def user_to_user_read(user: User) -> UserRead:
+    """Convierte un objeto User a UserRead, manejando la conversión de roles"""
+    return UserRead(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        roles=[ur.role for ur in user.roles] if user.roles else []
+    )
 
 
 # Funciones de JWT
