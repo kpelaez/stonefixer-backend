@@ -19,5 +19,5 @@ settings = Settings(
     ALGORITHM="HS256",
     ACCESS_TOKEN_EXPIRE_MINUTES=30,
     DEBUG= os.getenv("DEBUG", "False") == "True",
-    APP_NAME="Auth Service"
+    APP_NAME="StoneFixer Services"
 )
