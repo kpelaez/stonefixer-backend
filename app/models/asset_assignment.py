@@ -64,16 +64,17 @@ class AssetAssignmentCreate(SQLModel):
     condition_at_assignment: Optional[str] = None
     assignment_notes: Optional[str] = None
 
-class AssetAssignmentCreate(SQLModel):
-    """Esquema de creación para asignaciones"""
-    tech_asset_id: int
-    assigned_to_user_id: int
+class AssetAssignmentUpdate(SQLModel):
+    """Esquema de actualización para asignaciones"""
     expected_return_date: Optional[datetime] = None
+    actual_return_date: Optional[datetime] = None
+    status: Optional[AssignmentStatus] = None
     assignment_reason: Optional[str] = None
     location_of_use: Optional[str] = None
-    assigned_by_user_id: Optional[int] = None
     condition_at_assignment: Optional[str] = None
+    condition_at_return: Optional[str] = None
     assignment_notes: Optional[str] = None
+    return_notes: Optional[str] = None
 
 class AssetReturn(SQLModel):
     """Esquema para marcar un activo como devuelto"""

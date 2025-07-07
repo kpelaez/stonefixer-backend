@@ -38,7 +38,7 @@ class TechAssetBase(SQLModel):
     description: Optional[str] = Field(default=None, description="Descripcion detallada")
     brand: str = Field(description="Marca del activo")
     model: str = Field(description="Modelo del activo")
-    serial_numer: str = Field(unique = True, description="Numero de serie unico")
+    serial_number: str = Field(unique = True, description="Numero de serie unico")
     asset_tag: Optional[str] = Field(default=None, unique=True, index=True, description="Etiqueta de activo de la empresa")
     category: AssetCategory = Field(description="Categoria del activo")
     status: AssetStatus = Field(default=AssetStatus.AVAILABLE, description="Estado actual del activo")
