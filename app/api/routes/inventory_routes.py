@@ -54,7 +54,7 @@ async def delete_asset_endpoint(asset_id: int, db: Session = Depends(get_db)):
     return None
 
 @router.get("/{asset_id}/maintenance-history")
-async def get_asset_maintenance_history(asset_id: int, db: Session = Depends(get_db)):
+async def get_asset_maintenance_history_endpoint(asset_id: int, db: Session = Depends(get_db)):
     """Obtener historial de mantenimiento del activo"""
     from app.services.asset_maintenance_service import get_asset_maintenance_history
 
