@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from app.db.database import get_db
@@ -6,8 +6,8 @@ from app.db.database import get_db
 from app.models.tech_asset import AssetCategory, AssetStatus, TechAssetResponse, TechAssetSummary, TechAssetUpdate, TechAssetCreate, TechAssetWithAssignment
 from app.models.user import User
 
-from app.api.deps import require_roles
-from app.services.tech_asset_service import create_tech_asset, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset
+from app.api.deps import get_current_user, require_roles
+from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset
 
 
 router = APIRouter()
@@ -44,6 +44,7 @@ async def update_tech_asset_endpoint(asset_id: int, tech_asset_update: TechAsset
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo no encontrado")
     return tech_asset
 
+
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 @require_roles(["admin", "assets_inventory_manager"])
 async def delete_asset_endpoint(asset_id: int, db: Session = Depends(get_db)):
@@ -76,3 +77,15 @@ async def get_asset_statuses():
     """Obtener lista de estados disponibles para activos tecnológicos"""
     return [{"value": status.value, "label": status.value.replace("_", " ").title()} 
             for status in AssetStatus]
+
+@router.post("/generate-tag")
+@require_roles(["admin", "inventory_manager"])
+async def generate_asset_tag_endpoint(
+    category: AssetCategory,
+    location: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Generar una etiqueta de activo única"""
+    tag = generate_asset_tag(db, category, location)
+    return {"asset_tag": tag, "category": category.value, "location": location}
