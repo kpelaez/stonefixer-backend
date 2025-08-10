@@ -3,20 +3,26 @@ from enum import Enum
 from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship
 
+# Forward references para las relaciones
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .tech_asset import TechAsset
+    from .user import User
 
 class AssignmentStatus(str, Enum):
     """Estados de las asignaciones de activos"""
     ACTIVE = "active"           #Asignacion activa
     RETURNED = "returned"       #Activo devuelto
-    TRANSFERED = "transfered"   #Transferido a otro usuario
+    TRANSFERED = "transferred"   #Transferido a otro usuario
     LOST = "lost"               #Activo perdido
     DAMAGED = "damaged"         #Activo dañado durante asignacion
 
 class AssetAssignmentBase(SQLModel):
     """Modelo base para asignaciones de activos"""
-    tech_asset_id: int = Field(foreign_key="tech_asset.id", description="ID del activo tecnologico")
+    tech_asset_id: Optional[int] = Field(foreign_key="tech_asset.id", description="ID del activo tecnologico")
     assigned_to_user_id: int = Field(foreign_key="user.id", description="ID del usuario asignado")
-    assigned_date: datetime = Field(default_factory=datetime.now(timezone.utc), description="Fecha de asignación")
+    requested_by_user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    assigned_date: datetime = Field(default_factory= lambda: datetime.now(timezone.utc), description="Fecha de asignación")
     expected_return_date: Optional[datetime] = Field(default=None, description="Fecha esperada de devoluciones")
     actual_return_date: Optional[datetime] = Field(default=None, description="Fecha real de devolución")
     status: AssignmentStatus = Field(default=AssignmentStatus.ACTIVE, description="Estado de la asignación")
@@ -39,14 +45,20 @@ class AssetAssignment(AssetAssignmentBase, table=True):
     __tablename__ = "asset_assignments"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="Fecha de creacion del registro")
+    created_at: datetime = Field(default_factory=lambda:datetime.now(timezone.utc), description="Fecha de creacion del registro")
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
 
     # Relaciones
-    tech_asset: "TechAsset" = Relationship(back_populates="assignments")
-    assigned_to_user: "User" = Relationship(foreign_keys=[AssetAssignmentBase.assigned_to_user_id])
-    assigned_by_user: Optional["User"] = Relationship(foreign_key=[AssetAssignmentBase.assigned_by_user_id])
-
+    tech_asset: 'TechAsset' = Relationship(back_populates="assignments")
+    assigned_to_user: 'User' = Relationship(sa_relationship_kwargs={
+        "foreign_keys": "[AssetAssignment.assigned_to_user_id]",
+        "primaryjoin": "AssetAssignment.assigned_to_user_id == User.id"
+    })
+    assigned_by_user: Optional['User'] = Relationship(sa_relationship_kwargs={
+        "foreign_keys": "[AssetAssignment.assigned_by_user_id]",
+        "primaryjoin": "AssetAssignment.assigned_by_user_id == User.id"
+    })
+    
 class AssetAssignmentRead(AssetAssignmentBase):
     """Esquema de lectura para asignaciones"""
     id: int
@@ -101,10 +113,5 @@ class UserAssignmentSummary(SQLModel):
     user_email: str
     active_assignments: int
     total_assignments: int
-    assets_in_possession: List[str] = []
+    assets_in_possession: List[str] = Field(default_factory=list)
 
-# Forward references para las relaciones
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .tech_asset import TechAsset
-    from .user import User
