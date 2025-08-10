@@ -8,28 +8,31 @@ from app.config import settings
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.users_routes import router as users_router
 
+# Importacion de todos los modelos
+from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetMaintenance)
+# from app.models.user import User
+# from app.models.role import Role
+# from app.models.tech_asset import TechAsset
+# from app.models.asset_assignment import AssetAssignment
+# from app.models.asset_maintenance import AssetMaintenance
+
+# Crear tablas
+create_db_and_tables()
+
+
 # Importacion de nuevos routers
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignaments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
 
 
-# Importacion de todos los modelos
-from app.models.user import User
-from app.models.role import Role
-from app.models.tech_asset import TechAsset
-from app.models.asset_assignment import AssetAssignment
-from app.models.asset_maintenance import AssetMaintenance
-
-# Crear tablas
-create_db_and_tables()
 
 app = FastAPI(title=settings.APP_NAME)
 
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # URL de tu frontend (ajustar según sea necesario)
+    allow_origins=["http://localhost:5173", "http://192.168.56.1:5173", "http://192.168.0.146:5173"],  # URL de tu frontend (ajustar según sea necesario)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

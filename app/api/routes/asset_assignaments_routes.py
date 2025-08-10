@@ -35,7 +35,7 @@ router = APIRouter()
 
 @router.post("/", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
 @require_roles(["admin", "inventory_manager"])
-async def assign_asset(assignment: AssetAssignmentCreate, db: Session, current_user: User = Depends(get_current_user)):
+async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Asignar un activo tecnologico a un usuario"""
 
     try:
@@ -45,7 +45,7 @@ async def assign_asset(assignment: AssetAssignmentCreate, db: Session, current_u
 
 
 @router.get("/", response_model=List[AssetAssignmentWithDetails])
-async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Optional[int] = None, active_only: bool = False, db:Session = Depends(get_db)):
+async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Optional[int] = None, active_only: bool = False, db: Session = Depends(get_db)):
     """"Obtener lista de asignaciones de activos"""
     return get_assignments(
         db=db,
@@ -94,7 +94,7 @@ async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer
         new_assignment = transfer_asset(db, assignment_id,new_user_id,transfer_notes)
         return new_assignment
     except ValueError as e:
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
 @require_roles(["admin", "inventory_manager"])
@@ -107,7 +107,7 @@ async def unassing_asset(assignment_id: int, db: Session = Depends(get_db)):
     return None
 
 @router.get("/user/{user_id}", response_model=List[AssetAssignmentWithDetails])
-async def get_user_assignments_endpoint(db: Session, user_id: int, active_only: bool = True):
+async def get_user_assignments_endpoint(user_id: int, active_only: bool = True, db: Session = Depends(get_db)):
     """Obtener asignaciones de un usuario especifico"""
     # Verificar que el usuario exista
     user = db.get(User, user_id)

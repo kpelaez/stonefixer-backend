@@ -3,6 +3,12 @@ from enum import Enum
 from typing import Optional
 from sqlmodel import SQLModel, Field, Relationship
 
+# Forward references para las relaciones
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .tech_asset import TechAsset
+    from .user import User
+
 class MaintenanceType(str, Enum):
     """Tipos de mantenimiento"""
     PREVENTIVE = "preventive"
@@ -46,7 +52,7 @@ class AssetMaintenanceBase(SQLModel):
     completed_at: Optional[datetime] = Field(default=None, description="Fecha y hora de finalizacion")
 
     # Personal responsable
-    requested_by_user_id = Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que solicito el mantenimiento")
+    requested_by_user_id : Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que solicito el mantenimiento")
 
     # Informacion tecnica
     procedures_performed: Optional[str] = Field(default=None, description="Procedimientos realizados")
@@ -73,12 +79,12 @@ class AssetMaintenance(AssetMaintenanceBase, table=True):
     __tablename__ = "asset_maintenances"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default=datetime.now(timezone.utc), description="Fecha de creacion del registro")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de creacion del registro")
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
 
     # Relaciones
-    tech_asset: "TechAsset" = Relationship(back_populates="maintenances")
-    requested_by_user: Optional["User"] = Relationship(foreign_key=[AssetMaintenanceBase.requested_by_user_id])
+    tech_asset: 'TechAsset' = Relationship(back_populates="maintenances")
+    requested_by_user: Optional['User'] = Relationship()
 
 class AssetMaintenanceRead(AssetMaintenanceBase):
     """Esquema de lectura para mantenimientos"""
@@ -176,8 +182,3 @@ class MaintenanceMetrics(SQLModel):
     preventive_vs_corrective_ratio: Optional[float] = None
 
 
-# Forward references para las relaciones
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .tech_asset import TechAsset
-    from .user import User

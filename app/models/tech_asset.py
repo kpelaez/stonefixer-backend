@@ -3,6 +3,11 @@ from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime, timezone
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .asset_assignment import AssetAssignment, AssetAssignmentRead
+    from .asset_maintenance import AssetMaintenance
+
 #TechAssetResponse, TechAssetUpdate, TechAssetCreate
 
 class AssetStatus(str, Enum):
@@ -64,15 +69,15 @@ class TechAssetBase(SQLModel):
 
 class TechAsset(TechAssetBase, table= True):
     """Modelo de tabla para activos tecnologicos"""
-    __tablename__ = "tech_assets"
+    __tablename__ = "tech_asset"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="Fecha de creacion del registro")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de creacion del registro")
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
 
     # Relaciones
-    assignments: List["AssetAssignment"] = Relationship(back_populates="tech_asset")
-    maintenances: List["AssetMaintenance"] = Relationship(back_populates="tech_asset")
+    assignments: List['AssetAssignment'] = Relationship(back_populates="tech_asset")
+    maintenances: List['AssetMaintenance'] = Relationship(back_populates="tech_asset")
 
 class TechAssetResponse(TechAssetBase):
     """Esquema de lectura para activos tecnologicos"""
@@ -133,7 +138,5 @@ class TechAssetWithAssignment(TechAssetResponse):
     current_assignment: Optional["AssetAssignmentRead"] = None
     assigned_to: Optional[str] = None  # Nombre del usuario asignado
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .asset_assignment import AssetAssignment, AssetAssignmentRead
-    from .asset_maintenance import AssetMaintenance
+from .asset_assignment import AssetAssignmentRead
+TechAssetWithAssignment.update_forward_refs(AssetAssignmentRead=AssetAssignmentRead)

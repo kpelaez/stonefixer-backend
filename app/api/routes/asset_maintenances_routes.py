@@ -55,7 +55,7 @@ async def create_maintenance_endpoint(maintenance: AssetMaintenanceCreate, db: S
     
 
 @router.get("/", response_model=List[AssetMaintenanceWithDetails])
-async def get_maintenances_endpoint(status: MaintenanceStatus, maintenance_type: MaintenanceType, priority: Optional[MaintenancePriority] = None, asset_id: Optional[int] = None, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None, db: Session = Depends[get_db]):
+async def get_maintenances_endpoint(status: MaintenanceStatus, maintenance_type: MaintenanceType, priority: Optional[MaintenancePriority] = None, asset_id: Optional[int] = None, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None, db: Session = Depends(get_db)):
     """Obtener lista de mantenimientos con filtros"""
     return get_maintenances(db, status, maintenance_type, priority, asset_id,date_from, date_to)
 
