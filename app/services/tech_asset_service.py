@@ -15,7 +15,7 @@ from app.models.tech_asset import (
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
 
-def create_tech_asset(tech_asset: TechAssetCreate, db: Session):
+def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     """Crear un nuevo activo tecnologico"""
 
     # Verificar asset_tag si se proporciona
@@ -27,7 +27,7 @@ def create_tech_asset(tech_asset: TechAssetCreate, db: Session):
             raise ValueError(f"Ya existe un activo con la etiqueta: {tech_asset.asset_tag}")
 
     # Crear el activo
-    db_asset = TechAsset(**tech_asset.model_dump())
+    db_asset = TechAsset(**tech_asset.dict())
     db_asset.created_at = datetime.now(timezone.utc)
 
     db.add(db_asset)
@@ -45,7 +45,7 @@ def get_tech_assets(db: Session):
 
     assets = db.exec(query).all()
 
-    return [TechAssetSummary.model_validate(asset) for asset in assets]
+    return [TechAssetSummary.from_orm(asset) for asset in assets]
 
 def get_tech_asset(db: Session, tech_asset_id: int):
     """Obtener un activo tecnologico por ID con informacion de asignacion"""
@@ -63,7 +63,7 @@ def get_tech_asset(db: Session, tech_asset_id: int):
     ).first()
 
     # Crear respuesta con informacion de asignacion
-    asset_data = TechAssetWithAssignment.model_validate(asset)
+    asset_data = TechAssetWithAssignment.from_orm(asset)
 
     if current_assignment:
         from app.models.user import User
@@ -73,7 +73,7 @@ def get_tech_asset(db: Session, tech_asset_id: int):
 
     return asset_data
 
-def update_tech_asset(tech_asset_id: int, tech_asset_update: TechAssetUpdate, db: Session):
+def update_tech_asset(db: Session, tech_asset_id: int, tech_asset_update: TechAssetUpdate):
     """Actualizar un activo tecnologico"""
 
     asset = db.get(TechAsset, tech_asset_id)
@@ -81,7 +81,7 @@ def update_tech_asset(tech_asset_id: int, tech_asset_update: TechAssetUpdate, db
         return None
     
     # Obtener datos de actualziacion excluyendo campos no establecidos
-    update_data = tech_asset_update.model_dump(exclude_unset = True)
+    update_data = tech_asset_update.dict(exclude_unset = True)
 
     # Verificar unicidad de asset_tag si se esta actualizando
     if "asset_tag" in update_data and update_data["asset_tag"]:
@@ -95,7 +95,7 @@ def update_tech_asset(tech_asset_id: int, tech_asset_update: TechAssetUpdate, db
             raise ValueError(f"Ya existe un activo con la etiqueta: {update_data['asset_tag']}")
         
     # Actualizar campos
-    for field, value in update_data.item():
+    for field, value in update_data.items():
         setattr(asset, field, value)
 
     asset.updated_at = datetime.now(timezone.utc)

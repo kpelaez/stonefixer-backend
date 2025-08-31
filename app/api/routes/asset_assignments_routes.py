@@ -22,7 +22,7 @@ from app.services.asset_assignment_service import (
     get_assignment,
     get_assignments,
     update_assignment,
-    delete_assignmet,
+    delete_assignment,
     return_asset,
     transfer_asset,
     get_user_assignments,
@@ -100,7 +100,7 @@ async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer
 @require_roles(["admin", "inventory_manager"])
 async def unassing_asset(assignment_id: int, db: Session = Depends(get_db)):
     """Desasignar un activo (marcar como devuelto)"""
-    success = delete_assignmet(db, assignment_id)
+    success = delete_assignment(db, assignment_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignacion no encontrada")
     
