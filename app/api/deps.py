@@ -54,9 +54,18 @@ def require_roles(required_roles: List[str]):
     """Decorador para verificar que el usuario tenga al menos uno de los roles requeridos"""
     def decorator(func: Callable):
         @wraps(func)
-        async def wrapper(*args, current_user: User = Depends(get_current_user), **kwargs):
+        async def wrapper(*args,token: str = Depends(oauth2_scheme) ,current_user: User = Depends(get_current_user), **kwargs):
             # Obtener roles del usuario
-            user_roles = get_token_roles()
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                user_roles = payload.get("roles", [])
+            except JWTError:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token inválido o expirado",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
             
             # Verificar roles
             if not any(role in user_roles for role in required_roles):

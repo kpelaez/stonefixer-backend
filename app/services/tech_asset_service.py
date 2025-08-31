@@ -15,8 +15,8 @@ from app.models.tech_asset import (
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
 
-def create_tech_asset(db: Session, tech_asset: TechAssetCreate ):
-    """Crear un nuevo activo tecnologic"""
+def create_tech_asset(tech_asset: TechAssetCreate, db: Session):
+    """Crear un nuevo activo tecnologico"""
 
     # Verificar asset_tag si se proporciona
     if tech_asset.asset_tag:

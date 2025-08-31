@@ -32,7 +32,7 @@ app = FastAPI(title=settings.APP_NAME)
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://192.168.56.1:5173", "http://192.168.0.146:5173"],  # URL de tu frontend (ajustar según sea necesario)
+    allow_origins=["http://127.0.0.1:5173","http://localhost:5173", "http://192.168.56.1:5173", "http://192.168.0.146:5173"],  # URL de tu frontend (ajustar según sea necesario)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,9 +45,9 @@ app.include_router(auth_router, tags=["Autenticacion"])
 app.include_router(users_router, prefix="/users", tags=["Usuarios"])
 
 # RUTAS DE MODULO INVENTARIO
-app.include_router(tech_assets_router, prefix="/inventario/assets",tags=["Inventario - Activos Tech"])
+app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])
 
-app.include_router(asset_assignments_router, prefix="/inventario/asignments", tags=["Inventario - Asignaciones"])
+app.include_router(asset_assignments_router, prefix="/inventory/assignments", tags=["Inventario - Asignaciones"])
 
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
 
