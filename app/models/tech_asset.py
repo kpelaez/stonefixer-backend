@@ -52,6 +52,7 @@ class TechAssetBase(SQLModel):
     purchase_price: Optional[float] = Field(default=None, ge=0, description="Precio de compra")
     purchase_date: Optional[datetime] = Field(default=None, description="Fecha de compra del activo")
     supplier: Optional[str] = Field(default=None, description="Proveedor")
+    invoice: Optional[str] = Field(default=None, description="Numero de factura")
 
     # Informacion de garantia
     warranty_expiry: Optional[datetime] = Field(default=None, description="Fecha de vencimiento de garantia")
@@ -104,6 +105,7 @@ class TechAssetUpdate(SQLModel):
     purchase_price: Optional[float] = None
     purchase_date: Optional[datetime] = None
     supplier: Optional[str] = None
+    invoice: Optional[str] = None
 
     # Informacion de garantia
     warranty_expiry: Optional[datetime] = None
@@ -131,6 +133,7 @@ class TechAssetSummary(SQLModel):
     status: AssetStatus
     location: Optional[str] = None
     department: Optional[str] = None
+    purchase_price: Optional[float] = None
     user_assigned: Optional[str] = None
 
 class TechAssetWithAssignment(TechAssetResponse):

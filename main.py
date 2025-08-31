@@ -22,7 +22,7 @@ create_db_and_tables()
 
 # Importacion de nuevos routers
 from app.api.routes.tech_assets_routes import router as tech_assets_router
-from app.api.routes.asset_assignaments_routes import router as asset_assignments_router
+from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
 
 

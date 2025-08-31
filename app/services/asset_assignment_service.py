@@ -25,7 +25,7 @@ def create_assignment(db: Session, assignment: AssetAssignmentCreate, assigned_b
         raise ValueError("El activo tecnologico no existe")
 
     if tech_asset.status != AssetStatus.AVAILABLE:
-        raise ValueError(f"EL actino no esta disponible para asignacion. Estado actual: {tech_asset.status}")
+        raise ValueError(f"El activo no esta disponible para asignacion. Estado actual: {tech_asset.status}")
     
     # Verificar que el usuario existe
     user = db.get(User, assignment.assigned_to_user_id)
@@ -210,7 +210,7 @@ def transfer_asset(db: Session, assignmet_id: int, new_user_id: int, transfer_no
 
     return new_assignment
 
-def delete_assignmet(db: Session, assignment_id: int):
+def delete_assignment(db: Session, assignment_id: int):
     """Eliminar/descativar una asignacion (marcar como devuelta)"""
 
     assignmet = db.get(AssetAssignment, assignment_id)

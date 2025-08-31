@@ -234,6 +234,9 @@ def complete_maintenance(db: Session, maintenance_id: int, complete_data: Comple
         maintenance.tools_used = complete_data.tools_used
 
     if complete_data.labor_cost is not None:
+        maintenance.parts_cost = complete_data.labor_cost
+    
+    if complete_data.parts_cost is not None:
         maintenance.parts_cost = complete_data.parts_cost
     
     if complete_data.external_service_cost is not None:
