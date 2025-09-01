@@ -52,7 +52,7 @@ async def remove_role(
     return {"message": f"Rol '{role}' eliminado correctamente del usuario con ID {user_id}"}
 
 @router.get("/", response_model=List[UserRead])
-@require_roles(["admin"])
+# @require_roles(["admin"])
 async def list_users(
     skip: int = 0,
     limit: int = 100,

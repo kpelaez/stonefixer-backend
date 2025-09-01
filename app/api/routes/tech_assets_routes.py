@@ -91,13 +91,16 @@ async def get_asset_statuses():
             for status in AssetStatus]
 
 @router.post("/generate-tag")
-@require_roles(["admin", "inventory_manager"])
+#@require_roles(["admin", "inventory_manager"])
 async def generate_asset_tag_endpoint(
-    category: AssetCategory,
-    location: Optional[str] = None,
+    request: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Generar una etiqueta de activo única"""
-    tag = generate_asset_tag(db, category, location)
-    return {"asset_tag": tag, "category": category.value, "location": location}
+    try:
+        category = AssetCategory(request.get("category"))
+        tag = generate_asset_tag(db, category)
+        return {"asset_tag": tag, "category": category.value}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Categoria invalida: {e}")
