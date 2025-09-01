@@ -144,7 +144,7 @@ def delete_tech_asset(db: Session, tech_asset_id: int):
     return True
 
 
-def generate_asset_tag(db: Session, category: AssetCategory, location: Optional[str]):
+def generate_asset_tag(db: Session, category: AssetCategory):
     """Generar una etiqueta de activo unica"""
 
     # Mapeo de categorias a prefijos
@@ -166,7 +166,7 @@ def generate_asset_tag(db: Session, category: AssetCategory, location: Optional[
         AssetCategory.OTRO: "OTH"
     }
 
-    prefix = category_prefixes.get(category, "AST") #Si no encuentra categoria, asigna AST por defecto
+    prefix = category_prefixes.get(category, "KPD") #Si no encuentra categoria, asigna AST por defecto
 
     # Obtener el siguiente numero secuencial
 
@@ -187,5 +187,5 @@ def generate_asset_tag(db: Session, category: AssetCategory, location: Optional[
 
     next_number = max(numbers, default = 0) + 1
 
-    return f"{prefix}-{next_number:04d}"
+    return f"{prefix}-{next_number:03d}"
 
