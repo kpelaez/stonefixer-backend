@@ -10,7 +10,39 @@ from app.services.auth import add_role_to_user, get_user_roles, remove_role_from
 
 router = APIRouter()
 
-##EN MAIN ANTEPONER EN ENDPOINT "/users/..."
+# Endpoint para obtener informacion del usuario
+@router.get("/me", response_model=dict)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Obtener información del usuario actual"""
+    try:
+        # Obtener roles del usuario actual
+        user_roles = []
+        if hasattr(current_user, 'roles') and current_user.roles:
+            for role in current_user.roles:
+                if hasattr(role, 'name'):
+                    user_roles.append(role.name)
+                else:
+                    user_roles.append(str(role))
+        
+        return {
+            "id": current_user.id,
+            "full_name": current_user.full_name,
+            "email": current_user.email,
+            "department": getattr(current_user, 'department', None),
+            "role": user_roles[0] if user_roles else "user",
+            "roles": user_roles,
+            "is_active": current_user.is_active,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+            "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
+        }
+        
+    except Exception as e:
+        print(f"Error in get_current_user_info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al obtener información del usuario"
+        )
+
 
 # Endpoint para obtener los roles del usuario actual
 @router.get("/me/roles", response_model=List[str])
@@ -54,22 +86,52 @@ async def remove_role(
 @router.get("/", response_model=List[UserRead])
 # @require_roles(["admin"])
 async def list_users(
+    db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """"Listar todos los usuarios con sus roles (solo admin)"""
-    statement = select(User).offset(skip).limit(limit)
-    users = db.exec(statement).all()
+    try:
+        statement = select(User).where(User.is_active == True)
+        users = db.exec(statement).all()
 
-    #Para cada usuario, obtener sus roles
-    for user in users:
-        roles = get_user_roles(db, user.id)
-        #Añadir roles como atributo
-        setattr(user, "roles", roles)
+        #Para cada usuario, obtener sus roles
+        users_response = []
+        for user in users:
+            # Obtener roles del usuario de forma segura
+            user_roles = []
+            if hasattr(user, 'roles') and user.roles:
+                for role in user.roles:
+                    if hasattr(role, 'name'):
+                        user_roles.append(role.name)
+                    else:
+                        user_roles.append(str(role))
+            
+            user_data = {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "department": getattr(user, 'department', None),
+                "role": user_roles[0] if user_roles else "user",  # Primer rol como rol principal
+                "roles": user_roles,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None
+            }
+            users_response.append(user_data)
+        
+        return users_response
+    
+    except Exception as e:
+        print(f"Error in list_users: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al obtener usuarios"
+        )
 
-    return users
 
 @router.get("/{user_id}", response_model=UserRead)
 @require_roles(["admin"])
