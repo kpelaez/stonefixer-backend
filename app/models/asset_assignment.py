@@ -69,10 +69,9 @@ class AssetAssignmentCreate(SQLModel):
     """Esquema de creación para asignaciones"""
     tech_asset_id: int
     assigned_to_user_id: int
-    expected_return_date: Optional[datetime] = None
+    expected_return_date: Optional[str] = None
     assignment_reason: Optional[str] = None
     location_of_use: Optional[str] = None
-    assigned_by_user_id: Optional[int] = None
     condition_at_assignment: Optional[str] = None
     assignment_notes: Optional[str] = None
 
@@ -102,6 +101,7 @@ class AssetAssignmentWithDetails(AssetAssignmentRead):
     tech_asset_serial: Optional[str] = None
     tech_asset_brand: Optional[str] = None
     tech_asset_model: Optional[str] = None
+    tech_asset_name: Optional[str] = None
     assigned_to_name: Optional[str] = None
     assigned_to_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
