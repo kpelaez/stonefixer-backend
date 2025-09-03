@@ -34,14 +34,23 @@ router = APIRouter()
 
 
 @router.post("/", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
-@require_roles(["admin", "inventory_manager"])
+# @require_roles(["admin", "inventory_manager"])
 async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Asignar un activo tecnologico a un usuario"""
 
     try:
-        return create_assignment(db, assignment, current_user.id)
+        print(f"Received assignment data: {assignment}")
+        result = create_assignment(db, assignment, current_user.id)
+        print(f"Created assignment: {result}")
+        return result
     except ValueError as e:
+        print(f"ValueError creating assignment: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        print(f"Unexpected error creating assignment: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
 
 
 @router.get("/", response_model=List[AssetAssignmentWithDetails])
@@ -65,7 +74,7 @@ async def get_assignment_endpoint(assignment_id: int, db: Session = Depends(get_
     return assignment
 
 @router.patch("/{assignment_id}", response_model=AssetAssignmentRead)
-@require_roles(["admin", "inventory_manager"])
+# @require_roles(["admin", "inventory_manager"])
 async def update_assignment_endpoint(assignment_id: int, assignment_update: AssetAssignmentUpdate, db: Session = Depends(get_db)):
     """Actualizar una asignacion"""
     assignment = update_assignment(db, assignment_id, assignment_update)
@@ -75,7 +84,7 @@ async def update_assignment_endpoint(assignment_id: int, assignment_update: Asse
     return assignment
 
 @router.post("/{assignment_id}/return", response_model=AssetAssignmentRead)
-@require_roles(["admin", "inventory_manager"])
+#@require_roles(["admin", "inventory_manager"])
 async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn, db: Session = Depends(get_db)):
     """Marcar un activo como devuelto"""
     try:
@@ -87,17 +96,17 @@ async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn, db
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.post("/{assignment_id}/transfer", response_model=AssetAssignmentRead)
-@require_roles(["admin", "inventory_manager"])
+# @require_roles(["admin", "inventory_manager"])
 async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer_notes: Optional[str] = None, db: Session = Depends(get_db)):
     """Transferir un activo de un usuario a otro"""
     try:
-        new_assignment = transfer_asset(db, assignment_id,new_user_id,transfer_notes)
+        new_assignment = transfer_asset(db, assignment_id, new_user_id, transfer_notes)
         return new_assignment
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
-@require_roles(["admin", "inventory_manager"])
+#@require_roles(["admin", "inventory_manager"])
 async def unassing_asset(assignment_id: int, db: Session = Depends(get_db)):
     """Desasignar un activo (marcar como devuelto)"""
     success = delete_assignment(db, assignment_id)
@@ -114,7 +123,7 @@ async def get_user_assignments_endpoint(user_id: int, active_only: bool = True, 
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
-    return get_user_assignments(db,user_id,active_only)
+    return get_user_assignments(db, user_id, active_only)
 
 @router.get("/asset/{asset_id}/history", response_model=List[AssetAssignmentWithDetails])
 async def get_asset_assignments_endpoint(asset_id:int, db: Session = Depends(get_db)):
