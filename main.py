@@ -24,7 +24,7 @@ create_db_and_tables()
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-
+from app.api.routes.business_indicators_routes import router as business_indicators_router
 
 
 app = FastAPI(title=settings.APP_NAME)
@@ -50,6 +50,9 @@ app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["In
 app.include_router(asset_assignments_router, prefix="/inventory/assignments", tags=["Inventario - Asignaciones"])
 
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
+
+# RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
+app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 
 # Endpoint de ingreso al servidor
