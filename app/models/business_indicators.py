@@ -20,6 +20,15 @@ class IndicatorStatus(str, Enum):
     WARNING = "warning"
     CRITICAL = "critical"
 
+class IndicatorColor(str, Enum): 
+  GREEN = 'green'
+  RED = 'red'
+  BLUE = 'blue'
+  YELLOW = 'yellow'
+  PURPLE = 'purple'
+  GRAY = 'gray'
+
+
 # Modelos de respuesta
 
 class BusinessIndicator(BaseModel):
@@ -29,6 +38,7 @@ class BusinessIndicator(BaseModel):
     value: float
     unit: Optional[str] = None
     type: IndicatorType
+    color: Optional[IndicatorColor] = None
     trend_direction: TrendDirection
     trend_percentage: Optional[float] = None
     status: IndicatorStatus

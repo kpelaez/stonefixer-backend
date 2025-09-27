@@ -5,7 +5,8 @@ from sqlalchemy.engine import Connection
 
 from app.db.kpi_database import get_kpi_engine
 from app.models.business_indicators import (
-    BusinessIndicator, 
+    BusinessIndicator,
+    IndicatorColor, 
     IndicatorHistory, 
     BusinessIndicatorsRequest,
     BusinessIndicatorsResponse,
@@ -82,16 +83,17 @@ def get_total_facturado_indicator(kpi_conn: Connection) -> BusinessIndicator:
                 trend_direction = TrendDirection.UP if trend_percentage > 0 else TrendDirection.DOWN
         
         return BusinessIndicator(
-            id="total_facturado",
+            id="ventas",
             name="Total Facturado",
             description="Total facturado del mes actual",
             value=float(current_row.total_facturado),
             unit="$",
+            color = IndicatorColor.GREEN,
             type=IndicatorType.FINANCIAL,
             trend_direction=trend_direction,
             trend_percentage=trend_percentage,
             status=IndicatorStatus.HEALTHY,
-            last_updated=datetime.now()
+            last_updated=datetime.now(),
         )
         
     except Exception as e:
@@ -148,12 +150,13 @@ def get_total_cobrado_indicator(kpi_conn: Connection) -> BusinessIndicator:
                 trend_direction = TrendDirection.UP if trend_percentage > 0 else TrendDirection.DOWN
         
         return BusinessIndicator(
-            id="total_cobrado",
+            id="cobranzas",
             name="Total Cobrado",
             description="Total cobrado del mes actual",
             value=float(current_row.total_cobrado),
             unit="$",
             type=IndicatorType.FINANCIAL,
+            color=IndicatorColor.BLUE,
             trend_direction=trend_direction,
             trend_percentage=trend_percentage,
             status=IndicatorStatus.HEALTHY,
@@ -234,12 +237,13 @@ def get_ratio_cobranza_indicator(kpi_conn: Connection) -> BusinessIndicator:
                 trend_direction = TrendDirection.UP if trend_percentage > 0 else TrendDirection.DOWN
         
         return BusinessIndicator(
-            id="ratio_cobranza",
-            name="Ratio Cobranza",
+            id="giro_negocio",
+            name="Giro de Negocio",
             description="Porcentaje de cobranza vs facturación del mes",
             value=round(ratio, 2),
             unit="%",
             type=IndicatorType.OPERATIONAL,
+            color=IndicatorColor.YELLOW,
             trend_direction=trend_direction,
             trend_percentage=trend_percentage,
             status=status,
