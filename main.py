@@ -1,8 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
 from app.db.database import create_db_and_tables
 from app.config import settings
+
+# Configurar logging para mejor debugging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Importar routers existentes refactorizados
 from app.api.routes.auth_routes import router as auth_router
@@ -24,7 +29,8 @@ create_db_and_tables()
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-from app.api.routes.business_indicators_routes import router as business_indicators_router
+# from app.api.routes.business_indicators_routes import router as business_indicators_router
+from app.api.routes.business_indicators_routes_optimized import router as business_indicators_router_optimized
 
 
 app = FastAPI(title=settings.APP_NAME)
@@ -37,6 +43,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware personalizado para logging de rendimiento
+@app.middleware("http")
+async def log_requests(request, call_next):
+    import time
+    
+    start_time = time.time()
+    
+    # Procesar request
+    response = await call_next(request)
+    
+    # Calcular tiempo de procesamiento
+    process_time = time.time() - start_time
+    
+    # Log solo requests lentos o con errores
+    if process_time > 1.0 or response.status_code >= 400:
+        logger.warning(
+            f"{request.method} {request.url} - "
+            f"Status: {response.status_code} - "
+            f"Time: {process_time:.3f}s"
+        )
+    
+    # Agregar header de tiempo de respuesta
+    response.headers["X-Process-Time"] = str(process_time)
+    
+    return response
+
 
 # RUTAS DE AUTENTICACION (refactorizadas)
 app.include_router(auth_router, tags=["Autenticacion"])
@@ -52,7 +85,8 @@ app.include_router(asset_assignments_router, prefix="/inventory/assignments", ta
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
-app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
+# app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
+app.include_router(business_indicators_router_optimized, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 
 # Endpoint de ingreso al servidor
