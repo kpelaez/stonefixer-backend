@@ -36,13 +36,8 @@ def get_kpi_engine():
         # Configuración específica para PostgreSQL/Aiven
         connect_args={
             "connect_timeout": 10,           # Timeout de conexión inicial
-            "command_timeout": 30,           # Timeout para comandos SQL
-            "server_settings": {
-                "application_name": "stonefixer_dashboard",
-                "tcp_keepalives_idle": "300",     # Keep alive cada 5 min
-                "tcp_keepalives_interval": "30",   # Intervalo entre keep alives
-                "tcp_keepalives_count": "3",       # Número de intentos
-            }
+            # "command_timeout": 30,           # Timeout para comandos SQL
+            "options": "-c statement_timeout=30000",
         }
     )
 
