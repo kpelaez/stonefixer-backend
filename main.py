@@ -30,7 +30,7 @@ from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
 # from app.api.routes.business_indicators_routes import router as business_indicators_router
-from app.api.routes.business_indicators_routes_optimized import router as business_indicators_router_optimized
+from app.api.routes.business_indicators_routes_final import router as business_indicators_router_final
 
 
 app = FastAPI(title=settings.APP_NAME)
@@ -86,7 +86,7 @@ app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tag
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
 # app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
-app.include_router(business_indicators_router_optimized, prefix="/api/business-indicators", tags=["Business Indicators"])
+app.include_router(business_indicators_router_final, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 
 # Endpoint de ingreso al servidor
