@@ -13,9 +13,10 @@ class AssignmentStatus(str, Enum):
     """Estados de las asignaciones de activos"""
     ACTIVE = "active"           #Asignacion activa
     RETURNED = "returned"       #Activo devuelto
-    TRANSFERED = "transferred"   #Transferido a otro usuario
+    TRANSFERED = "transfered"   #Transferido a otro usuario
     LOST = "lost"               #Activo perdido
     DAMAGED = "damaged"         #Activo dañado durante asignacion
+    CANCELED = "canceled"       #La asignacion fue cancelada
 
 class AssetAssignmentBase(SQLModel):
     """Modelo base para asignaciones de activos"""
