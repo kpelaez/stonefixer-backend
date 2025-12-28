@@ -9,3 +9,5 @@ __pycache__/
 test_kpi_connection.py
 test_business_indicators.py
 .env
+
+/htmlcov/

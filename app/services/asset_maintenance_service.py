@@ -41,7 +41,7 @@ def create_maintenance(db: Session, maintenance: AssetMaintenanceCreate):
             raise ValueError("El usuario solicitante no existe")
 
     # Crear el mantenimiento
-    db_maintenance = AssetMaintenance(**maintenance.model_dump())
+    db_maintenance = AssetMaintenance(**maintenance.dict())
     db_maintenance.created_at = datetime.now(timezone.utc)
 
     db.add(db_maintenance)
@@ -146,7 +146,7 @@ def update_maintenance(db: Session, maintenance_id: int, maintenance_update: Ass
         return None
     
     # Obtener datos de actualizacion excluyendo campos no establecidos
-    update_data = maintenance_update.model_dump(exclude_unset = True)
+    update_data = maintenance_update.dict(exclude_unset = True)
 
     # Actualizar campos
     for field, value in update_data.items():
@@ -283,11 +283,11 @@ def cancel_maintenance(db: Session, maintenance_id: int, reason: Optional[str] =
     if not maintenance:
         return None
     
-    if maintenance.status in [MaintenanceStatus.COMPLETED, MaintenanceStatus.CANCELLED]:
+    if maintenance.status in [MaintenanceStatus.COMPLETED, MaintenanceStatus.CANCELED]:
         raise ValueError("No se puede cancelar un mantenimiento completado o ya cancelado")
 
     # Actualiar estado
-    maintenance.status = MaintenanceStatus.CANCELLED
+    maintenance.status = MaintenanceStatus.CANCELED
     if reason: 
         maintenance.notes = f"{maintenance.notes or ''}\n[CANCELADO] {reason}".strip()
     

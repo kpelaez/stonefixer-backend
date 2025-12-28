@@ -16,16 +16,23 @@ from app.models.asset_assignment import (
 from app.models.tech_asset import TechAsset, AssetStatus
 from app.models.user import User
 
-def create_assignment(db: Session, assignment_data: AssetAssignmentCreate, assigned_by_user_id: Optional[int] = None):
+def create_assignment(db: Session, assignment_data: AssetAssignmentCreate, assigned_by_user_id: Optional[int] = None, is_transfer: bool = False):
     """Crear una nueva asignacion de activo"""
 
     # Verificar que el activo existe y esta disponible
     tech_asset = db.get(TechAsset, assignment_data.tech_asset_id)
     if not tech_asset:
         raise ValueError("El activo tecnologico no existe")
-
-    if tech_asset.status != AssetStatus.AVAILABLE:
-        raise ValueError(f"El activo no esta disponible para asignacion. Estado actual: {tech_asset.status}")
+    
+    # # MEJORADO: Validación de estado según contexto
+    # if is_transfer:
+    #     # En transferencias, el asset DEBE estar ASSIGNED
+    #     if tech_asset.status != AssetStatus.ASSIGNED:
+    #         raise ValueError(f"En transferencias, el activo debe estar asignado. Estado actual: {tech_asset.status}")
+    # else:
+    #     # En asignaciones normales, el asset DEBE estar AVAILABLE
+    #     if tech_asset.status != AssetStatus.AVAILABLE:
+    #         raise ValueError(f"El activo no está disponible para asignación. Estado actual: {tech_asset.status}")
     
     # Verificar que el usuario existe
     user = db.get(User, assignment_data.assigned_to_user_id)
@@ -35,15 +42,16 @@ def create_assignment(db: Session, assignment_data: AssetAssignmentCreate, assig
     if not user.is_active:
         raise ValueError("El usuario no está activo")
     
-    # Verificar si hay alguna asignacion activa para este activo
-    existing_assignment = db.exec(
-        select(AssetAssignment)
-        .where(AssetAssignment.tech_asset_id == assignment_data.tech_asset_id)
-        .where(AssetAssignment.status == AssignmentStatus.ACTIVE)
-    ).first()
+     # MEJORADO: Solo verificar asignaciones activas si NO es transferencia
+    if not is_transfer:
+        existing_assignment = db.exec(
+            select(AssetAssignment)
+            .where(AssetAssignment.tech_asset_id == assignment_data.tech_asset_id)
+            .where(AssetAssignment.status == AssignmentStatus.ACTIVE)
+        ).first()
 
-    if existing_assignment:
-        raise ValueError("El activo ya tiene una asignacion activa")
+        if existing_assignment:
+            raise ValueError("El activo ya tiene una asignación activa")
     
     assignment_dict = assignment_data.dict(exclude_unset=True)
 
@@ -73,10 +81,12 @@ def create_assignment(db: Session, assignment_data: AssetAssignmentCreate, assig
 
     db.add(db_assignment)
 
-    # Actualizar el estado del activo
-    tech_asset.status = AssetStatus.ASSIGNED
+    # MEJORADO: Solo actualizar estado si NO es transferencia
+    # (en transferencias ya está ASSIGNED)
+    if not is_transfer:
+        tech_asset.status = AssetStatus.ASSIGNED
+        db.add(tech_asset)
         
-    db.add(tech_asset)
     db.commit()
     db.refresh(db_assignment)
 
@@ -158,7 +168,7 @@ def update_assignment(db: Session, assignment_id: int, assignment_update: AssetA
         return None
     
     # Obtener datos de actualizacion excluyendo campos no establecidos
-    update_data = assignment_update.model_dump(exclude_unset = True)
+    update_data = assignment_update.dict(exclude_unset = True)
 
     # Actualizar campos
     for field, value in update_data.items():
@@ -182,6 +192,13 @@ def return_asset(db: Session, assignment_id: int, return_data: AssetReturn):
     if assignment.status != AssignmentStatus.ACTIVE:
         raise ValueError("Solo se pueden devolver asignaciones activas")
     
+    # CORREGIDO: Actualizar TODOS los campos de la devolución
+    assignment.status = AssignmentStatus.RETURNED
+    assignment.actual_return_date = return_data.actual_return_date or datetime.now(timezone.utc)
+    assignment.condition_at_return = return_data.condition_at_return
+    assignment.return_notes = return_data.return_notes
+    assignment.updated_at = datetime.now(timezone.utc)
+    
     # Actualizar el estado del activo
     tech_asset = db.get(TechAsset, assignment.tech_asset_id)
     if tech_asset:
@@ -199,7 +216,7 @@ def return_asset(db: Session, assignment_id: int, return_data: AssetReturn):
 def transfer_asset(db: Session, assignmet_id: int, new_user_id: int, transfer_notes: Optional[str] = None):
     """Transferir un activo de un usuario a otro"""
 
-    # Marcar la asignacion actual como transferida
+    # Obtener la asignacion actual
     current_assignment = db.get(AssetAssignment, assignmet_id)
     if not current_assignment:
         raise ValueError("La asignacion no existe")
@@ -207,16 +224,31 @@ def transfer_asset(db: Session, assignmet_id: int, new_user_id: int, transfer_no
     if current_assignment.status != AssignmentStatus.ACTIVE:
         raise ValueError("Solo se pueden transferir asignaciones activas")
 
-    # Verificar que el nuevo usuario existe
+    # Verificar que el nuevo usuario existe y esta activo
     new_user = db.get(User, new_user_id)
     if not new_user or not new_user.is_active:
         raise ValueError("El usuario destino no existe")
+    
+    # NUEVO: Validar que no se transfiera al mismo usuario
+    if current_assignment.assigned_to_user_id == new_user_id:
+        raise ValueError("No se puede transferir un activo al mismo usuario que ya lo tiene asignado")
+    
+    # Liberar el asset ANTES de crear la nueva asignación
+    tech_asset = db.get(TechAsset, current_assignment.tech_asset_id)
+    if tech_asset:
+        tech_asset.status = AssetStatus.AVAILABLE
+        db.add(tech_asset)
+        db.flush()  # Aplicar cambio sin hacer commit completo
     
     # Marcar asignacion actual como transferida
     current_assignment.status = AssignmentStatus.TRANSFERED
     current_assignment.actual_return_date = datetime.now(timezone.utc)
     current_assignment.return_notes = f"Transferido a  {new_user.full_name}. {transfer_notes or ''}"
     current_assignment.updated_at = datetime.now(timezone.utc)
+    db.add(current_assignment)
+
+    db.commit()
+    db.refresh(current_assignment)
 
     # Crear nueva asignacion
     new_assignment_data = AssetAssignmentCreate(
@@ -228,10 +260,7 @@ def transfer_asset(db: Session, assignmet_id: int, new_user_id: int, transfer_no
         assignment_notes=f"Transferido desde {current_assignment.assigned_to_user.full_name if current_assignment.assigned_to_user else 'usuario anterior'}. {transfer_notes or ''}"
     )
 
-    new_assignment = create_assignment(db, new_assignment_data, current_assignment.assigned_by_user_id)
-
-    db.add(current_assignment)
-    db.commit()
+    new_assignment = create_assignment(db, new_assignment_data, current_assignment.assigned_by_user_id, is_transfer=True)
 
     return new_assignment
 
@@ -243,8 +272,16 @@ def delete_assignment(db: Session, assignment_id: int):
     if not assignment:
         return False
     
+    # CORREGIDO: Validar estado ANTES de actualizar
+    if assignment.status == AssignmentStatus.ACTIVE:
+        # Liberar el activo si estaba asignado
+        tech_asset = db.get(TechAsset, assignment.tech_asset_id)
+        if tech_asset:
+            tech_asset.status = AssetStatus.AVAILABLE
+            db.add(tech_asset)
+    
     # Marcar como cancelada en lugar de eliminar
-    assignment.status = AssignmentStatus.CANCELLED
+    assignment.status = AssignmentStatus.CANCELED
     assignment.updated_at = datetime.now(timezone.utc)
 
     # Liberar el activo si estaba asignado
@@ -283,8 +320,8 @@ def get_assignment_statistics(db: Session) -> dict:
         "total_assignments": len(total_assignments),
         "active_assignments": len(active_assignments),
         "returned_assignments": len([a for a in total_assignments if a.status == AssignmentStatus.RETURNED]),
-        "transferred_assignments": len([a for a in total_assignments if a.status == AssignmentStatus.TRANSFERRED]),
-        "cancelled_assignments": len([a for a in total_assignments if a.status == AssignmentStatus.CANCELLED])
+        "transfered_assignments": len([a for a in total_assignments if a.status == AssignmentStatus.TRANSFERED]),
+        "canceled_assignments": len([a for a in total_assignments if a.status == AssignmentStatus.CANCELED])
     }
 
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.db.database import get_db
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_admin, require_inventory_manager
 from app.models.user import User
 
 from app.models.asset_assignment import (
@@ -34,8 +34,7 @@ router = APIRouter()
 
 
 @router.post("/", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
-# @require_roles(["admin", "inventory_manager"])
-async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     """Asignar un activo tecnologico a un usuario"""
 
     try:
@@ -74,8 +73,7 @@ async def get_assignment_endpoint(assignment_id: int, db: Session = Depends(get_
     return assignment
 
 @router.patch("/{assignment_id}", response_model=AssetAssignmentRead)
-# @require_roles(["admin", "inventory_manager"])
-async def update_assignment_endpoint(assignment_id: int, assignment_update: AssetAssignmentUpdate, db: Session = Depends(get_db)):
+async def update_assignment_endpoint(assignment_id: int, assignment_update: AssetAssignmentUpdate,current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Actualizar una asignacion"""
     assignment = update_assignment(db, assignment_id, assignment_update)
     if not assignment:
@@ -84,8 +82,7 @@ async def update_assignment_endpoint(assignment_id: int, assignment_update: Asse
     return assignment
 
 @router.post("/{assignment_id}/return", response_model=AssetAssignmentRead)
-#@require_roles(["admin", "inventory_manager"])
-async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn, db: Session = Depends(get_db)):
+async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn,current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Marcar un activo como devuelto"""
     try:
         assignment = return_asset(db, assignment_id, return_data)
@@ -96,8 +93,7 @@ async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn, db
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.post("/{assignment_id}/transfer", response_model=AssetAssignmentRead)
-# @require_roles(["admin", "inventory_manager"])
-async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer_notes: Optional[str] = None, db: Session = Depends(get_db)):
+async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer_notes: Optional[str] = None, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Transferir un activo de un usuario a otro"""
     try:
         new_assignment = transfer_asset(db, assignment_id, new_user_id, transfer_notes)
@@ -106,8 +102,7 @@ async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
-#@require_roles(["admin", "inventory_manager"])
-async def unassing_asset(assignment_id: int, db: Session = Depends(get_db)):
+async def unassing_asset(assignment_id: int, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Desasignar un activo (marcar como devuelto)"""
     success = delete_assignment(db, assignment_id)
     if not success:

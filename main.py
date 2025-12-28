@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
+from app.core.exceptions import register_exception_handlers
 from app.db.database import create_db_and_tables
 from app.config import settings
 
@@ -34,6 +35,8 @@ from app.api.routes.business_indicators_routes_final import router as business_i
 
 
 app = FastAPI(title=settings.APP_NAME)
+
+register_exception_handlers(app)
 
 # Configurar CORS
 app.add_middleware(
