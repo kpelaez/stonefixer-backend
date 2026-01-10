@@ -31,7 +31,7 @@ def create_tech_asset_endpoint(tech_asset: TechAssetCreate, db: Session = Depend
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
     
 @router.get("/", response_model=List[TechAssetSummary])
-async def get_tech_assets_endpoint(current_user: User = Depends(get_current_user) ,db: Session = Depends(get_db)):
+async def get_tech_assets_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener lista de activos"""
     try:
         assets = get_tech_assets(db)
