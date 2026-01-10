@@ -3,6 +3,9 @@ from .role import Role, UserRole
 from .tech_asset import TechAsset
 from .asset_assignment import AssetAssignment
 from .asset_maintenance import AssetMaintenance
+from .shift_schedule import (
+    ShiftSchedule
+)
 
 __all__ = [
     "User", 
@@ -10,6 +13,7 @@ __all__ = [
     "Role", 
     "TechAsset", 
     "AssetAssignment", 
-    "AssetMaintenance"
+    "AssetMaintenance",
+    "ShiftSchedule" 
 ]
 
