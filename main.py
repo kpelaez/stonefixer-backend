@@ -32,6 +32,7 @@ from app.api.routes.asset_assignments_routes import router as asset_assignments_
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
 # from app.api.routes.business_indicators_routes import router as business_indicators_router
 from app.api.routes.business_indicators_routes_final import router as business_indicators_router_final
+from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 
 
 app = FastAPI(title=settings.APP_NAME)
@@ -86,6 +87,9 @@ app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["In
 app.include_router(asset_assignments_router, prefix="/inventory/assignments", tags=["Inventario - Asignaciones"])
 
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
+
+# RUTAS DE MODULO AGENDA STOCK
+app.include_router(shift_schedule_router, prefix="/api/shift-schedules", tags=["Shift Scheduling"])
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
 # app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
