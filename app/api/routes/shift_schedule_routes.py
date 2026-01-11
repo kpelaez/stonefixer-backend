@@ -205,9 +205,7 @@ def delete_shift_schedule(
     
     # Obtener roles del usuario actual
     user_roles = get_user_roles_list(current_user.id, db)
-    
-    is_supervisor = current_user.has_any_role(["admin", "manager"])
-    
+        
     # Validar deadline
     ShiftScheduleService.validate_modification_deadline(
         shift.date,
