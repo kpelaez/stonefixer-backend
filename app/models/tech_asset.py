@@ -136,6 +136,10 @@ class TechAssetSummary(SQLModel):
     location: Optional[str] = None
     department: Optional[str] = None
     purchase_price: Optional[float] = None
+    purchase_date: Optional[datetime] = None 
+    warranty_expiry: Optional[datetime] = None  
+    supplier: Optional[str] = None  
+    invoice: Optional[str] = None  
     user_assigned: Optional[str] = None
 
 class TechAssetWithAssignment(TechAssetResponse):
