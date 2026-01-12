@@ -14,6 +14,7 @@ from app.models.tech_asset import (
 )
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
+from app.models.user import User
 
 # MÁQUINA DE ESTADOS - Transiciones Permitidas
 
@@ -140,7 +141,19 @@ def get_tech_assets(db: Session, include_deleted: bool = False):
     Returns:
         List[TechAssetSummary]: Lista de activos
     """
-    query = select(TechAsset)
+    query = ( select(
+        TechAsset, 
+        AssetAssignment.assigned_to_user_id, 
+        User.full_name, 
+        User.email
+        ).outerjoin(
+        AssetAssignment,
+        (AssetAssignment.tech_asset_id == TechAsset.id) &
+        (AssetAssignment.status == AssignmentStatus.ACTIVE)
+        ).outerjoin(
+            User, User.id == AssetAssignment.assigned_to_user_id
+        )
+    )   
     
     # Por defecto, excluir eliminados
     if not include_deleted:
@@ -148,9 +161,22 @@ def get_tech_assets(db: Session, include_deleted: bool = False):
     
     query = query.order_by(TechAsset.created_at)
     
-    assets = db.exec(query).all()
+    results = db.exec(query).all()
     
-    return [TechAssetSummary.from_orm(asset) for asset in assets]
+    # Convertir a TechAssetSummary con información de asignación
+    assets_with_assignment = []
+    for asset, assigned_to_id, user_name, user_email in results:
+        asset_summary = TechAssetSummary.from_orm(asset)
+        
+        # Agregar información de usuario asignado si existe
+        if assigned_to_id and user_name:
+            asset_summary.user_assigned = f"{user_name} ({user_email})"
+        else:
+            asset_summary.user_assigned = None
+            
+        assets_with_assignment.append(asset_summary)
+    
+    return assets_with_assignment
 
 def get_tech_asset(db: Session, tech_asset_id: int):
     """
