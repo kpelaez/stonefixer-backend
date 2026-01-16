@@ -433,8 +433,8 @@ def generate_asset_tag(db: Session, category: AssetCategory) -> str:
     
     FIX BUG #1: Usa SELECT FOR UPDATE para evitar race conditions.
     
-    Formato: {PREFIX}-{YEAR}-{NUMBER}
-    Ejemplo: NB-2024-001, DT-2024-042
+    Formato: {PREFIX}-{NUMBER}
+    Ejemplo: NBK-001, DSK-042
     
     Args:
         db: Sesión de base de datos
@@ -472,7 +472,6 @@ def generate_asset_tag(db: Session, category: AssetCategory) -> str:
     last_asset = db.exec(
         select(TechAsset)
         .where(TechAsset.asset_tag.startswith(f"{prefix}-"))
-        .where(TechAsset.deleted_at.is_(None))
         .order_by(TechAsset.asset_tag.desc())
         .limit(1)
         .with_for_update()  # LOCK para evitar race condition
@@ -499,7 +498,6 @@ def generate_asset_tag(db: Session, category: AssetCategory) -> str:
     existing = db.exec(
         select(TechAsset)
         .where(TechAsset.asset_tag == asset_tag)
-        .where(TechAsset.deleted_at.is_(None))
     ).first()
     
     if existing:
