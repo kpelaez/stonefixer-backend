@@ -145,4 +145,33 @@ async def get_users_assignment_summary_endpoint(db: Session = Depends(get_db)):
 @router.get("/my-assets", response_model=List[AssetAssignmentWithDetails])
 async def get_my_assignments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener activos asignados al usuario actual"""
-    return get_user_assignments(db, current_user.id, active_only=True)
+    print(f"[DEBUG] Usuario actual: {current_user.id} - {current_user.full_name}")
+    
+    try:
+        assignments = get_user_assignments(db, current_user.id, active_only=True)
+        
+        print(f"[DEBUG] Asignaciones encontradas: {len(assignments)}")
+        
+        # Intentar serializar manualmente para ver dónde falla
+        for i, assignment in enumerate(assignments):
+            print(f"[DEBUG] Asignación {i+1}:")
+            print(f"  - ID: {assignment.id}")
+            print(f"  - tech_asset_id: {assignment.tech_asset_id}")
+            print(f"  - tech_asset_name: {assignment.tech_asset_name}")
+            print(f"  - tech_asset_asset_tag: {assignment.tech_asset_asset_tag}")
+            print(f"  - assigned_to_name: {assignment.assigned_to_name}")
+            
+            # Intentar convertir a dict para ver si hay problemas
+            try:
+                assignment_dict = assignment.dict()
+                print(f"  ✅ Dict conversion OK")
+            except Exception as e:
+                print(f"  ❌ Error convirtiendo a dict: {e}")
+        
+        return assignments
+        
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo mis activos: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
