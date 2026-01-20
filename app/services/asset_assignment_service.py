@@ -304,7 +304,7 @@ def get_user_assignments(db: Session, user_id: int, active_only: bool = True):
 def get_asset_assignments(db: Session, asset_id: int):
     """Obtener historial de asignaciones de un activo especifico"""
 
-    return get_assignments(db, asset_id)
+    return get_assignments(db, user_id=None ,asset_id=asset_id)
 
 
 def get_assignment_statistics(db: Session) -> dict:
