@@ -299,7 +299,7 @@ def delete_assignment(db: Session, assignment_id: int):
 def get_user_assignments(db: Session, user_id: int, active_only: bool = True):
     """Obtener asignaciones de un usuario especifico"""
 
-    return get_assignments(db, user_id, active_only)
+    return get_assignments(db, user_id=user_id, active_only=active_only)
 
 def get_asset_assignments(db: Session, asset_id: int):
     """Obtener historial de asignaciones de un activo especifico"""

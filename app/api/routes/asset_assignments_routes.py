@@ -62,6 +62,47 @@ async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Opti
         active_only=active_only
     )
 
+@router.get("/my-assets", response_model=List[AssetAssignmentWithDetails])
+async def get_my_assignments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Obtener activos asignados al usuario actual"""
+    
+    return get_user_assignments(db, current_user.id, active_only=True)
+        
+
+@router.get("/statistics/overview")
+async def get_assignment_statistics_endpoint(db: Session = Depends(get_db)):
+    """Obtener estadisticas de asignaciones"""
+    return get_assignment_statistics(db)
+
+@router.get("/users/summary", response_model=List[UserAssignmentSummary])
+async def get_users_assignment_summary_endpoint(db: Session = Depends(get_db)):
+    """Obtener resumen de asignaciones por usuarios"""
+    return get_users_assignment_summary(db)
+
+@router.get("/user/{user_id}", response_model=List[AssetAssignmentWithDetails])
+async def get_user_assignments_endpoint(user_id: int, active_only: bool = True, db: Session = Depends(get_db)):
+    """Obtener asignaciones de un usuario especifico"""
+    # Verificar que el usuario exista
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    return get_user_assignments(db, user_id, active_only)
+
+@router.get("/asset/{asset_id}/history", response_model=List[AssetAssignmentWithDetails])
+async def get_asset_assignments_endpoint(asset_id:int, db: Session = Depends(get_db)):
+    """Obtener historial de asignaciones de un activo especifico"""
+    from app.services.tech_asset_service import get_tech_asset
+
+    # Verificar que el activo exista
+    asset = get_tech_asset(db, asset_id)
+    if not asset: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo tecnologico no encontrado") 
+
+    return get_asset_assignments(db, asset_id)
+
+
+
 @router.get("/{assignment_id}", response_model=AssetAssignmentWithDetails)
 async def get_assignment_endpoint(assignment_id: int, db: Session = Depends(get_db)):
     """Obtener una asignacion especifica"""
@@ -110,68 +151,4 @@ async def unassing_asset(assignment_id: int, current_user: User = Depends(requir
     
     return None
 
-@router.get("/user/{user_id}", response_model=List[AssetAssignmentWithDetails])
-async def get_user_assignments_endpoint(user_id: int, active_only: bool = True, db: Session = Depends(get_db)):
-    """Obtener asignaciones de un usuario especifico"""
-    # Verificar que el usuario exista
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
-    return get_user_assignments(db, user_id, active_only)
-
-@router.get("/asset/{asset_id}/history", response_model=List[AssetAssignmentWithDetails])
-async def get_asset_assignments_endpoint(asset_id:int, db: Session = Depends(get_db)):
-    """Obtener historial de asignaciones de un activo especifico"""
-    from app.services.tech_asset_service import get_tech_asset
-
-    # Verificar que el activo exista
-    asset = get_tech_asset(db, asset_id)
-    if not asset: 
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activo tecnologico no encontrado") 
-
-    return get_asset_assignments(db, asset_id)
-
-@router.get("/statistics/overview")
-async def get_assignment_statistics_endpoint(db: Session = Depends(get_db)):
-    """Obtener estadisticas de asignaciones"""
-    return get_assignment_statistics(db)
-
-@router.get("/users/summary", response_model=List[UserAssignmentSummary])
-async def get_users_assignment_summary_endpoint(db: Session = Depends(get_db)):
-    """Obtener resumen de asignaciones por usuarios"""
-    return get_users_assignment_summary(db)
-
-@router.get("/my-assets", response_model=List[AssetAssignmentWithDetails])
-async def get_my_assignments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Obtener activos asignados al usuario actual"""
-    print(f"[DEBUG] Usuario actual: {current_user.id} - {current_user.full_name}")
-    
-    try:
-        assignments = get_user_assignments(db, current_user.id, active_only=True)
-        
-        print(f"[DEBUG] Asignaciones encontradas: {len(assignments)}")
-        
-        # Intentar serializar manualmente para ver dónde falla
-        for i, assignment in enumerate(assignments):
-            print(f"[DEBUG] Asignación {i+1}:")
-            print(f"  - ID: {assignment.id}")
-            print(f"  - tech_asset_id: {assignment.tech_asset_id}")
-            print(f"  - tech_asset_name: {assignment.tech_asset_name}")
-            print(f"  - tech_asset_asset_tag: {assignment.tech_asset_asset_tag}")
-            print(f"  - assigned_to_name: {assignment.assigned_to_name}")
-            
-            # Intentar convertir a dict para ver si hay problemas
-            try:
-                assignment_dict = assignment.dict()
-                print(f"  ✅ Dict conversion OK")
-            except Exception as e:
-                print(f"  ❌ Error convirtiendo a dict: {e}")
-        
-        return assignments
-        
-    except Exception as e:
-        print(f"[ERROR] Error obteniendo mis activos: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
