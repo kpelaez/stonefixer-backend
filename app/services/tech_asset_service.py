@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from sqlmodel import Session, select
 from datetime import datetime, timezone
 
@@ -130,12 +130,22 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     
     return db_asset
 
-def get_tech_assets(db: Session, include_deleted: bool = False):
+def get_tech_assets(
+        db: Session,
+        skip: int = 0,
+        limit: int = 50, 
+        category: Optional[AssetCategory] = None,
+        status: Optional[AssetStatus] = None, 
+        include_deleted: bool = False) -> List[TechAssetSummary]:
     """
     Obtener lista de activos tecnológicos.
     
     Args:
         db: Sesión de base de datos
+        skip: Registros a saltar (para paginación)
+        limit: Máximo de registros a devolver (para paginación)
+        category: Filtro opcional por categoría
+        status: Filtro opcional por estado
         include_deleted: Si True, incluye activos eliminados (soft-deleted)
         
     Returns:
@@ -158,25 +168,77 @@ def get_tech_assets(db: Session, include_deleted: bool = False):
     # Por defecto, excluir eliminados
     if not include_deleted:
         query = query.where(TechAsset.deleted_at.is_(None))
+
+    # Filtro: Por categoría
+    if category is not None:
+        query = query.where(TechAsset.category == category)
     
-    query = query.order_by(TechAsset.created_at)
+    # Filtro: Por estado
+    if status is not None:
+        query = query.where(TechAsset.status == status)
+    
+    
+    query = query.order_by(TechAsset.created_at.desc())
+
+    # Aplicar paginación
+    query = query.offset(skip).limit(limit)
     
     results = db.exec(query).all()
     
     # Convertir a TechAssetSummary con información de asignación
     assets_with_assignment = []
-    for asset, assigned_to_id, user_name, user_email in results:
+    for asset, assigned_to_id, user_name in results:
         asset_summary = TechAssetSummary.from_orm(asset)
         
         # Agregar información de usuario asignado si existe
         if assigned_to_id and user_name:
-            asset_summary.user_assigned = f"{user_name} ({user_email})"
+            asset_summary.user_assigned = f"{user_name}"
         else:
             asset_summary.user_assigned = None
             
         assets_with_assignment.append(asset_summary)
     
     return assets_with_assignment
+
+# FUNCIÓN: Contar total de activos (para paginación)
+def get_tech_assets_count(
+    db: Session,
+    category: Optional[AssetCategory] = None,
+    status: Optional[AssetStatus] = None,
+    include_deleted: bool = False
+) -> int:
+    """
+    Obtener el total de activos (para calcular páginas)
+    
+    Args:
+        db: Sesión de base de datos
+        category: Filtro opcional por categoría
+        status: Filtro opcional por estado
+        include_deleted: Si True, incluye activos eliminados
+        
+    Returns:
+        int: Cantidad total de activos que coinciden con los filtros
+        
+    Example:
+        total = get_tech_assets_count(db)
+        total_pages = (total + limit - 1) // limit  # Redondeo hacia arriba
+    """
+    from sqlmodel import func
+    
+    query = select(func.count(TechAsset.id))
+    
+    # Aplicar mismos filtros que en get_tech_assets
+    if not include_deleted:
+        query = query.where(TechAsset.deleted_at.is_(None))
+    
+    if category is not None:
+        query = query.where(TechAsset.category == category)
+    
+    if status is not None:
+        query = query.where(TechAsset.status == status)
+    
+    total = db.exec(query).one()
+    return total
 
 def get_tech_asset(db: Session, tech_asset_id: int):
     """
