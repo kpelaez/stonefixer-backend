@@ -541,9 +541,9 @@ def generate_asset_tag(db: Session, category: AssetCategory) -> str:
     if last_asset and last_asset.asset_tag:
         # Extraer el número del tag
         parts = last_asset.asset_tag.split('-')
-        if len(parts) == 3:
+        if len(parts) == 2:
             try:
-                last_number = int(parts[2])
+                last_number = int(parts[1])
                 new_number = last_number + 1
             except ValueError:
                 new_number = 1
