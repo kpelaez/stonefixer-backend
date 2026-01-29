@@ -154,8 +154,7 @@ def get_tech_assets(
     query = ( select(
         TechAsset, 
         AssetAssignment.assigned_to_user_id, 
-        User.full_name, 
-        User.email
+        User.full_name,
         ).outerjoin(
         AssetAssignment,
         (AssetAssignment.tech_asset_id == TechAsset.id) &
