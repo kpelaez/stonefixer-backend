@@ -7,6 +7,7 @@ from app.models.tech_asset import AssetCategory, AssetStatus, TechAssetResponse,
 from app.models.user import User
 
 from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
+from app.schemas.common import PaginatedResponse
 from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count
 
 from app.core.rate_limiter import limiter
@@ -43,14 +44,14 @@ def create_tech_asset_endpoint(
         traceback.print_exc()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
     
-@router.get("/", response_model=List[TechAssetSummary])
+@router.get("/", response_model=PaginatedResponse[TechAssetSummary])
 @limiter.limit(settings.READ_RATE_LIMIT) #200/minuto
 async def get_tech_assets_endpoint(
     request: Request,
     page: int = Query(1,ge=1, description="Numero de pagina (empieza en 1)"),
     page_size: int = Query(50, ge=1, le=100, description="Registros por pagina"),
     category: Optional[AssetCategory] = Query(None, description="Filtrar por categoria"),
-    status: Optional[AssetStatus] = Query(None, description="Filtrar por estado"),
+    asset_status: Optional[AssetStatus] = Query(None, alias="status", description="Filtrar por estado"),
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)):
     """
@@ -69,23 +70,31 @@ async def get_tech_assets_endpoint(
 
     Rate limit: 200 request/minuto
     """
-    # Calcular skip basado en pagina
+    # Calcular offset a partir de la pagina
     skip = (page - 1 ) * page_size
 
     # Obtener total de registros (para calcular paginas)
     total = get_tech_assets_count(
         db,
         category=category,
-        status=status,
+        status=asset_status,
         include_deleted=False
     )
 
     # Calcular total de páginas
-    total_pages = (total + page_size - 1) // page_size  # Redondeo hacia arriba
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1 # Redondeo hacia arriba
 
     try:
-        assets = get_tech_assets(db,skip=skip, limit=page_size, category=category, status=status)
-        return assets
+        assets = get_tech_assets(db,skip=skip, limit=page_size, category=category, status=asset_status)
+        
+        return {
+            "items": assets,
+            "total": total,
+            "skip": skip,
+            "limit": page_size,
+            "page": page,
+            "total_pages": total_pages,
+        }
     
     except Exception as e:
         print(f"[ERROR] Error obteniendo activos: {e}")
