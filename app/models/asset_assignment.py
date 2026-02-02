@@ -102,6 +102,7 @@ class AssetAssignmentWithDetails(AssetAssignmentRead):
     tech_asset_serial: Optional[str] = None
     tech_asset_brand: Optional[str] = None
     tech_asset_model: Optional[str] = None
+    tech_asset_asset_tag: Optional[str] = None
     assigned_to_name: Optional[str] = None
     assigned_to_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
