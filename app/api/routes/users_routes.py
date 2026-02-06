@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
 from typing import Any, Dict, List
 
@@ -6,6 +6,9 @@ from app.api.deps import get_current_user, RoleChecker, get_user_permissions, re
 from app.db.database import get_db
 from app.models.user import User, UserRead
 from app.services.auth import add_role_to_user, get_user_roles, remove_role_from_user
+
+from app.core.rate_limiter import limiter
+from app.config import settings
 
 
 router = APIRouter()
