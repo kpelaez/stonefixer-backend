@@ -1,8 +1,9 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db.database import get_db
+from app.models.asset_assignment import AssetAssignment, AssignmentStatus
 from app.models.tech_asset import AssetCategory, AssetStatus, TechAssetResponse, TechAssetSummary, TechAssetUpdate, TechAssetCreate, TechAssetWithAssignment
 from app.models.user import User
 
@@ -52,6 +53,7 @@ async def get_tech_assets_endpoint(
     page_size: int = Query(50, ge=1, le=100, description="Registros por pagina"),
     category: Optional[AssetCategory] = Query(None, description="Filtrar por categoria"),
     asset_status: Optional[AssetStatus] = Query(None, alias="status", description="Filtrar por estado"),
+    search: Optional[str] = Query(None, description="Buscar por nombre, etiqueta, marca, modelo o serial "),
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)):
     """
@@ -62,6 +64,7 @@ async def get_tech_assets_endpoint(
     - `page_size`: Cantidad de registros por página (máx 100)
     - `category`: Filtrar por categoría (opcional)
     - `status`: Filtrar por estado (opcional)
+    - `search`: Buscar en nombre, asset_tag, marca, modelo o serial_number
 
     **Ejemplos:**
     - Primera página: `?page=1&page_size=50`
@@ -87,8 +90,27 @@ async def get_tech_assets_endpoint(
     try:
         assets = get_tech_assets(db,skip=skip, limit=page_size, category=category, status=asset_status)
         
+        assets_with_assignment = []
+        for asset in assets:
+            asset_summary = TechAssetSummary.from_orm(asset)
+
+            # Obtener asignación activa
+            current_assignment = db.exec(
+                select(AssetAssignment)
+                .where(AssetAssignment.tech_asset_id == asset.id)
+                .where(AssetAssignment.status == AssignmentStatus.ACTIVE)
+            ).first()
+            
+            if current_assignment:
+                assigned_user = db.get(User, current_assignment.assigned_to_user_id)
+                if assigned_user:
+                    asset_summary.user_assigned = f"{assigned_user.full_name}"
+            
+            assets_with_assignment.append(asset_summary)
+
+
         return {
-            "items": assets,
+            "items": assets_with_assignment,
             "total": total,
             "skip": skip,
             "limit": page_size,
