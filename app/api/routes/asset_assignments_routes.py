@@ -1,10 +1,13 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session
 
 from app.db.database import get_db
 from app.api.deps import get_current_user, require_admin, require_inventory_manager
 from app.models.user import User
+
+from app.core.rate_limiter import limiter
+from app.config import settings
 
 from app.models.asset_assignment import (
     AssetAssignment,
@@ -34,8 +37,19 @@ router = APIRouter()
 
 
 @router.post("/", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
-async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    """Asignar un activo tecnologico a un usuario"""
+@limiter.limit(settings.CRITICAL_WRITE_RATE_LIMIT) # 20/minuto
+async def assign_asset(
+    request: Request,
+    assignment: AssetAssignmentCreate, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_admin)):
+    """
+    Asignar un activo tecnologico a un usuario
+
+    Operacion Critica
+    Permisos: solo administradores
+    Rate limit: 20 requests/minuto
+    """
 
     try:
         print(f"Received assignment data: {assignment}")
@@ -114,8 +128,19 @@ async def get_assignment_endpoint(assignment_id: int, db: Session = Depends(get_
     return assignment
 
 @router.patch("/{assignment_id}", response_model=AssetAssignmentRead)
-async def update_assignment_endpoint(assignment_id: int, assignment_update: AssetAssignmentUpdate,current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
-    """Actualizar una asignacion"""
+@limiter.limit(settings.WRITE_RATE_LIMIT)
+async def update_assignment_endpoint(
+    request: Request,
+    assignment_id: int, 
+    assignment_update: AssetAssignmentUpdate,
+    current_user: User = Depends(require_inventory_manager),
+    db: Session = Depends(get_db)):
+    """
+    Actualizar una asignacion
+    
+    Permisos: Administradores e Inventory Managers
+    Rate limit: 50 requests/minuto
+    """
     assignment = update_assignment(db, assignment_id, assignment_update)
     if not assignment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignacion no encontrada")
@@ -123,8 +148,20 @@ async def update_assignment_endpoint(assignment_id: int, assignment_update: Asse
     return assignment
 
 @router.post("/{assignment_id}/return", response_model=AssetAssignmentRead)
-async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn,current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
-    """Marcar un activo como devuelto"""
+@limiter.limit(settings.CRITICAL_WRITE_RATE_LIMIT) # 20/minuto
+async def return_asset_endpoint(
+    request: Request,
+    assignment_id: int, 
+    return_data: AssetReturn,
+    current_user: User = Depends(require_inventory_manager) ,
+    db: Session = Depends(get_db)):
+    """
+    Marcar un activo como devuelto
+
+    Operacion Critica
+    Permisos: Administradores e inventory managers
+    rate limit: 20 requests/minuto
+    """
     try:
         assignment = return_asset(db, assignment_id, return_data)
         if not assignment:
@@ -134,8 +171,21 @@ async def return_asset_endpoint(assignment_id: int, return_data: AssetReturn,cur
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.post("/{assignment_id}/transfer", response_model=AssetAssignmentRead)
-async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer_notes: Optional[str] = None, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
-    """Transferir un activo de un usuario a otro"""
+@limiter.limit(settings.CRITICAL_WRITE_RATE_LIMIT)
+async def transfer_asset_endpoint(
+    request: Request,
+    assignment_id: int, 
+    new_user_id: int, 
+    transfer_notes: Optional[str] = None, 
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)):
+    """
+    Transferir un activo de un usuario a otro
+
+    Operacion Critica
+    Permisos: solo administradores
+    Rate limit: 20 requests/minuto
+    """
     try:
         new_assignment = transfer_asset(db, assignment_id, new_user_id, transfer_notes)
         return new_assignment
@@ -143,8 +193,19 @@ async def transfer_asset_endpoint(assignment_id: int, new_user_id: int, transfer
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def unassing_asset(assignment_id: int, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
-    """Desasignar un activo (marcar como devuelto)"""
+@limiter.limit(settings.CRITICAL_WRITE_RATE_LIMIT) #20/minuto
+async def unassing_asset(
+    request: Request,
+    assignment_id: int, 
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)):
+    """
+    Desasignar un activo (marcar como devuelto)
+
+    Operacion Critica
+    Permisos: solo administradores
+    Rate limite: 20 requests/minuto
+    """
     success = delete_assignment(db, assignment_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asignacion no encontrada")

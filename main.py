@@ -1,13 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 import logging
 
 from app.core.exceptions import register_exception_handlers
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.db.database import create_db_and_tables
 from app.config import settings
 
 # Configurar logging para mejor debugging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s -%(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Importar routers existentes refactorizados
@@ -35,17 +41,23 @@ from app.api.routes.business_indicators_routes_final import router as business_i
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 
 
-app = FastAPI(title=settings.APP_NAME)
+app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG, version="1.0.0")
+
+# RATE LIMITER
+# ============================================================================
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 register_exception_handlers(app)
 
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
+    max_age=3600
 )
 
 # Middleware personalizado para logging de rendimiento
@@ -54,6 +66,9 @@ async def log_requests(request, call_next):
     import time
     
     start_time = time.time()
+
+    # Log de request
+    logger.info(f"→ {request.method} {request.url.path}")
     
     # Procesar request
     response = await call_next(request)
@@ -65,6 +80,12 @@ async def log_requests(request, call_next):
     if process_time > 1.0 or response.status_code >= 400:
         logger.warning(
             f"{request.method} {request.url} - "
+            f"Status: {response.status_code} - "
+            f"Time: {process_time:.3f}s"
+        )
+    else:
+        logger.info(
+            f"← {request.method} {request.url.path} - "
             f"Status: {response.status_code} - "
             f"Time: {process_time:.3f}s"
         )
@@ -96,6 +117,20 @@ app.include_router(shift_schedule_router, prefix="/api/shift-schedules", tags=["
 app.include_router(business_indicators_router_final, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 
+
+# HEALTH CHECK
+# ============================================================================
+@app.get("/health")
+@limiter.exempt  # No aplicar rate limit al health check
+async def health_check():
+    """Endpoint para verificar que la API está funcionando"""
+    return {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "version": "1.0.0"
+    }
+
+
 # Endpoint de ingreso al servidor
 @app.get("/")
 def read_root():
@@ -103,4 +138,4 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.DEBUG)
