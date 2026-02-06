@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 from datetime import datetime, timezone
 
 from app.models.tech_asset import (
@@ -136,7 +136,9 @@ def get_tech_assets(
         limit: int = 50, 
         category: Optional[AssetCategory] = None,
         status: Optional[AssetStatus] = None, 
-        include_deleted: bool = False) -> List[TechAssetSummary]:
+        include_deleted: bool = False,
+        search: Optional[str] = None
+        ) -> List[TechAssetSummary]:
     """
     Obtener lista de activos tecnológicos.
     
@@ -147,6 +149,7 @@ def get_tech_assets(
         category: Filtro opcional por categoría
         status: Filtro opcional por estado
         include_deleted: Si True, incluye activos eliminados (soft-deleted)
+        search: Término de búsqueda (busca en nombre, asset_tag, marca, modelo, serial)
         
     Returns:
         List[TechAssetSummary]: Lista de activos
@@ -176,6 +179,19 @@ def get_tech_assets(
     if status is not None:
         query = query.where(TechAsset.status == status)
     
+    # Busqueda en multiples campos
+    if search:
+        search_term = f"%{search}"
+        query = query.where(
+            or_(
+                TechAsset.name.ilike(search_term),
+                TechAsset.asset_tag.ilike(search_term),
+                TechAsset.brand.ilike(search_term),
+                TechAsset.model.ilike(search_term),
+                TechAsset.serial_number.ilike(search_term),
+            )
+        )
+    
     
     query = query.order_by(TechAsset.created_at.desc())
 
@@ -184,27 +200,29 @@ def get_tech_assets(
     
     results = db.exec(query).all()
     
-    # Convertir a TechAssetSummary con información de asignación
-    assets_with_assignment = []
-    for asset, assigned_to_id, user_name in results:
-        asset_summary = TechAssetSummary.from_orm(asset)
+    # # Convertir a TechAssetSummary con información de asignación
+    # assets_with_assignment = []
+    # for asset, assigned_to_id, user_name in results:
+    #     asset_summary = TechAssetSummary.from_orm(asset)
         
-        # Agregar información de usuario asignado si existe
-        if assigned_to_id and user_name:
-            asset_summary.user_assigned = f"{user_name}"
-        else:
-            asset_summary.user_assigned = None
+    #     # Agregar información de usuario asignado si existe
+    #     if assigned_to_id and user_name:
+    #         asset_summary.user_assigned = f"{user_name}"
+    #     else:
+    #         asset_summary.user_assigned = None
             
-        assets_with_assignment.append(asset_summary)
+    #     assets_with_assignment.append(asset_summary)
     
-    return assets_with_assignment
+    # return assets_with_assignment
+    return results
 
 # FUNCIÓN: Contar total de activos (para paginación)
 def get_tech_assets_count(
     db: Session,
     category: Optional[AssetCategory] = None,
     status: Optional[AssetStatus] = None,
-    include_deleted: bool = False
+    include_deleted: bool = False,
+    search: Optional[str] = None
 ) -> int:
     """
     Obtener el total de activos (para calcular páginas)
@@ -214,6 +232,7 @@ def get_tech_assets_count(
         category: Filtro opcional por categoría
         status: Filtro opcional por estado
         include_deleted: Si True, incluye activos eliminados
+        search: Término de búsqueda
         
     Returns:
         int: Cantidad total de activos que coinciden con los filtros
@@ -236,6 +255,19 @@ def get_tech_assets_count(
     if status is not None:
         query = query.where(TechAsset.status == status)
     
+    # Aplicar búsqueda
+    if search:
+        search_term = f"%{search}%"
+        query = query.where(
+            or_(
+                TechAsset.name.ilike(search_term),
+                TechAsset.asset_tag.ilike(search_term),
+                TechAsset.brand.ilike(search_term),
+                TechAsset.model.ilike(search_term),
+                TechAsset.serial_number.ilike(search_term),
+            )
+        )
+
     total = db.exec(query).one()
     return total
 
