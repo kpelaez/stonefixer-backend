@@ -27,6 +27,7 @@ class AssetAssignmentBase(SQLModel):
     expected_return_date: Optional[datetime] = Field(default=None, description="Fecha esperada de devoluciones")
     actual_return_date: Optional[datetime] = Field(default=None, description="Fecha real de devolución")
     status: AssignmentStatus = Field(default=AssignmentStatus.ACTIVE, description="Estado de la asignación")
+    accessories: Optional[str] = Field(default=None, description="Accesorios entregados con el activo")
 
     # Informacion adicional
     assignment_reason: Optional[str] = Field(default=None, description="Motivo de la asignación")
@@ -49,6 +50,12 @@ class AssetAssignment(AssetAssignmentBase, table=True):
     created_at: datetime = Field(default_factory=lambda:datetime.now(timezone.utc), description="Fecha de creacion del registro")
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
 
+    # Integracion con Humand
+    humand_document_name: Optional[str] = Field(default=None, description="Nombre del documento en Humand")
+    document_sent_to_humand: bool = Field(default=False, description="Si el documento fue enviado a Humand")
+    document_sent_at: Optional[datetime] = Field(default=None, description="Fecha de envio a Humand")
+    humand_folder_id: Optional[int] = Field(default=None, description="ID de carpeta en Humand")
+    
     # Relaciones
     tech_asset: 'TechAsset' = Relationship(back_populates="assignments")
     assigned_to_user: 'User' = Relationship(sa_relationship_kwargs={

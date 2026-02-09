@@ -16,6 +16,14 @@ class User(UserBase, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
+
+    dni_encrypted: Optional[str] = Field(default=None, description="DNI encriptado con Fernet")
+    dni_hash: Optional[str] = Field(default=None, index=True, description="Hash SHA256 del DNI para busquedas")
+
+    # Consentimiento
+    personal_data_consent: bool = Field(default=False, description="Consentimientos uso de datos")
+    personal_data_consent_date: Optional[datetime] = Field(default=None)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

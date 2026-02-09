@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Any, Dict, List
+
+from app.core.dni_security import dni_manager
+
 
 from app.api.deps import get_current_user, RoleChecker, get_user_permissions, require_roles, require_admin
 from app.db.database import get_db
@@ -398,7 +402,40 @@ async def get_roles_statistics(
         )
 
 
+class UserDNIUpdate(BaseModel):
+    dni: str
+    consent: bool = True  # Consentimiento explícito
 
+@router.patch("/{user_id}/dni")
+async def update_user_dni(
+    user_id: int,
+    dni_data: UserDNIUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Actualiza el DNI encriptado de un usuario
+    """
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    if not dni_data.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Se requiere consentimiento explícito para almacenar el DNI"
+        )
+    
+    # Encriptar DNI
+    user.dni_encrypted = dni_manager.encrypt_dni(dni_data.dni)
+    user.dni_hash = dni_manager.hash_dni(dni_data.dni)
+    user.personal_data_consent = True
+    user.personal_data_consent_date = datetime.now(timezone.utc)
+    
+    db.add(user)
+    db.commit()
+    
+    return {"message": "DNI actualizado exitosamente (encriptado)"}
 
 
 
