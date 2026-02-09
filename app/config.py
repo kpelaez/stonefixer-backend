@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     # Configuracion para obtener KPIs en la base defaultdb
     KPI_DATABASE_URL: str
 
+    # Humand API
+    HUMAND_API_URL: str = "https://api-prod.humand.co/public/api/v1"
+    HUMAND_API_KEY: str = ""
+    HUMAND_FOLDER_ID: int = 0 # UD de ka carpeta "legajo"
+
+    # Seguridad DNI
+    DNI_ENCRYPTION_KEY: str = "" # Generar con Fernet.generate_key()
+
+    class Config:
+        env_file = ".env"
+
 settings = Settings(
     # Configuracion para conectarse a base de datos StoneFixer
     DATABASE_URL=os.getenv("DATABASE_URL","sqlite///./sql_app.db"),
