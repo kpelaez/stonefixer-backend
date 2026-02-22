@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Any, Dict, List
+from datetime import datetime, timezone
 
 from app.core.dni_security import dni_manager
 
 
-from app.api.deps import get_current_user, RoleChecker, get_user_permissions, require_roles, require_admin
+from app.api.deps import get_current_user, get_user_permissions, require_admin
 from app.db.database import get_db
-from app.models.user import User, UserRead
+from app.models.user import User
 from app.services.auth import add_role_to_user, get_user_roles, remove_role_from_user
 
 
@@ -128,6 +129,8 @@ async def list_users(
                 "role": user_roles[0] if user_roles else "user",  # Rol principal
                 "roles": user_roles,
                 "is_active": user.is_active,
+                "has_dni": user.dni_encrypted is not None,
+                "personal_data_consent": user.personal_data_consent,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
                 "updated_at": user.updated_at.isoformat() if user.updated_at else None
             }

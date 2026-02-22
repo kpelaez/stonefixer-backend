@@ -118,7 +118,7 @@ def get_assignment(db: Session, assignment_id: int):
     )
 
 
-def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Optional[int]= None, active_only: bool = False):
+def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Optional[int]= None, active_only: bool = False, page: int = 1, page_size: int = 10):
     """Obtener lista de asignaciones con filtros"""
     
     query = select(AssetAssignment)
@@ -135,7 +135,17 @@ def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Option
     
     # Ordenar por fecha de asignación (más recientes primero)
     query = query.order_by(AssetAssignment.created_at.desc())
-    assignments = db.exec(query).all()
+
+    # COUNT total antes de paginar
+    from sqlmodel import func
+    count_query = select(func.count()).select_from(query.subquery())
+    total = db.exec(count_query).one()
+
+    # Paginación
+    skip = (page - 1) * page_size
+    paginated_query = query.offset(skip).limit(page_size)
+
+    assignments = db.exec(paginated_query).all()
     
     # Convertir a AssetAssignmentWithDetails
     result = []
@@ -158,7 +168,14 @@ def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Option
         )
         result.append(assignment_detail)
 
-    return result
+    import math
+    return {
+        "items": result,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": math.ceil(total / page_size) if total > 0 else 1,
+    }
 
 def update_assignment(db: Session, assignment_id: int, assignment_update: AssetAssignment):
     """Actualizar una asignacion"""
@@ -298,13 +315,16 @@ def delete_assignment(db: Session, assignment_id: int):
 
 def get_user_assignments(db: Session, user_id: int, active_only: bool = True):
     """Obtener asignaciones de un usuario especifico"""
+    
+    result = get_assignments(db, user_id=user_id, active_only=active_only, page_size=9999)
 
-    return get_assignments(db, user_id=user_id, active_only=active_only)
+    return result["items"]
 
 def get_asset_assignments(db: Session, asset_id: int):
     """Obtener historial de asignaciones de un activo especifico"""
+    result = get_assignments(db, asset_id=asset_id, page_size=9999)
 
-    return get_assignments(db, user_id=None ,asset_id=asset_id)
+    return result["items"]
 
 
 def get_assignment_statistics(db: Session) -> dict:

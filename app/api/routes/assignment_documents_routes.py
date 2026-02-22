@@ -99,7 +99,8 @@ async def generate_assignment_document_preview(
     assignment_data = {
         "id": assignment.id,
         "assigned_date": assignment.assigned_date,
-        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado"
+        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado",
+        "accessories": assignment.accessories or "Ninguno"
     }
     
     # 6. Generar PDF
@@ -138,11 +139,20 @@ async def send_assignment_document_to_humand(
     Permisos: Solo administradores
     """
     # 1-6: Mismo flujo que generate_preview
-    assignment = get_assignment(db, assignment_id)
+    # assignment = get_assignment(db, assignment_id)
+    # if not assignment:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND,
+    #         detail="Asignación no encontrada"
+    #     )
+    assignment = db.get(AssetAssignment, assignment_id)
     if not assignment:
+        raise HTTPException(status_code=404, detail="Asignación no encontrada")
+    
+    if assignment.document_sent_to_humand:  # ← ahora funciona
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asignación no encontrada"
+            status_code=400,
+            detail=f"El documento ya fue enviado a Humand el {assignment.document_sent_at.strftime('%d/%m/%Y %H:%M')}"
         )
     
     # Verificar que no se haya enviado antes
@@ -195,7 +205,8 @@ async def send_assignment_document_to_humand(
     assignment_data = {
         "id": assignment.id,
         "assigned_date": assignment.assigned_date,
-        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado"
+        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado",
+        "accessories": assignment.accessories or "Ninguno"
     }
     
     # Generar PDF
@@ -256,7 +267,7 @@ async def get_assignment_document_status(
     """
     Consulta el estado del documento de asignación
     """
-    assignment = get_assignment(db, assignment_id)
+    assignment = db.get(AssetAssignment, assignment_id)
     if not assignment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

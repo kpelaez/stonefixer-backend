@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 
 from app.db.database import get_db
@@ -52,14 +52,16 @@ async def assign_asset(assignment: AssetAssignmentCreate, db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
 
 
-@router.get("/", response_model=List[AssetAssignmentWithDetails])
-async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Optional[int] = None, active_only: bool = False, db: Session = Depends(get_db)):
+@router.get("/")
+async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Optional[int] = None, active_only: bool = False, page: int = Query(default=1, ge=1), page_size: int = Query(default=10, ge=1, le=100) ,db: Session = Depends(get_db)):
     """"Obtener lista de asignaciones de activos"""
     return get_assignments(
         db=db,
         user_id=user_id,
         asset_id= asset_id,
-        active_only=active_only
+        active_only=active_only,
+        page=page,
+        page_size=page_size,
     )
 
 @router.get("/my-assets", response_model=List[AssetAssignmentWithDetails])
