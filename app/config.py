@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Humand API
     HUMAND_API_URL: str = "https://api-prod.humand.co/public/api/v1"
     HUMAND_API_KEY: str = ""
-    HUMAND_FOLDER_ID: int = 0 # UD de ka carpeta "legajo"
+    HUMAND_FOLDER_ID: int = 358764 # UD de ka carpeta "Equipos tecnologicos"
 
     # Seguridad DNI
     DNI_ENCRYPTION_KEY: str = "" # Generar con Fernet.generate_key()

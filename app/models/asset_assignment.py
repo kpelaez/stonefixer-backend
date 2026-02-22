@@ -109,9 +109,15 @@ class AssetAssignmentWithDetails(AssetAssignmentRead):
     tech_asset_serial: Optional[str] = None
     tech_asset_brand: Optional[str] = None
     tech_asset_model: Optional[str] = None
+    tech_asset_asset_tag: Optional[str] = None
     assigned_to_name: Optional[str] = None
     assigned_to_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
+    # Campos de informacion Humand
+    document_sent_to_humand: bool = False
+    document_sent_at: Optional[datetime] = None
+    humand_document_name: Optional[str] = None
+    humand_folder_id: Optional[int] = None
 
 class UserAssignmentSummary(SQLModel):
     """Resumen de asignaciones por usuario"""

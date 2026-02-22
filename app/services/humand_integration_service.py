@@ -24,7 +24,7 @@ class HumandIntegrationService:
         employee_dni: str,
         pdf_buffer: BytesIO,
         assignment_id: int,
-        send_notification: bool = True
+        send_notification: bool = False #Cambiar luego en produccion
     ) -> dict:
         """
         Sube documento de asignación a Humand
@@ -83,16 +83,15 @@ class HumandIntegrationService:
     def _get_signature_coordinates(self) -> str:
         """
         Retorna coordenadas de firma (FIJAS para template estándar)
-        
-        ⚠️ AJUSTAR según tu template de PDF
+
         Estas coordenadas son para la línea de firma en la parte inferior del documento
         """
         coordinates = [{
-            "page": 0,  # Primera página
+            "page": 1,  # Segunda página
             "x": 0.10,  # 10% desde la izquierda
-            "y": 0.15,  # 15% desde arriba (85% desde abajo)
-            "height": 0.05,  # 5% de altura
-            "width": 0.35   # 35% de ancho
+            "y": 0.80,  # 80% desde arriba (20% desde abajo)
+            "height": 0.08,  # 8% de altura
+            "width": 0.40   # 40% de ancho
         }]
         
         import json
