@@ -147,5 +147,11 @@ class TechAssetWithAssignment(TechAssetResponse):
     current_assignment: Optional["AssetAssignmentRead"] = None
     assigned_to: Optional[str] = None  # Nombre del usuario asignado
 
+class GenerateAssetTagRequest(SQLModel):
+    """Schema para la solicitud de generación de asset tag"""
+    category: AssetCategory
+
+    model_config = {"json_schema_extra": {"example": {"category": "Notebook"}}}
+
 from .asset_assignment import AssetAssignmentRead
 TechAssetWithAssignment.update_forward_refs(AssetAssignmentRead=AssetAssignmentRead)
