@@ -1,9 +1,18 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, logger, status
 from sqlmodel import Session, select
 from app.db.database import get_db
 
-from app.models.tech_asset import AssetCategory, AssetStatus, TechAssetResponse, TechAssetSummary, TechAssetUpdate, TechAssetCreate, TechAssetWithAssignment
+from app.models.tech_asset import (
+    AssetCategory, 
+    AssetStatus, 
+    TechAssetResponse, 
+    TechAssetSummary, 
+    TechAssetUpdate, 
+    TechAssetCreate, 
+    TechAssetWithAssignment,
+    GenerateAssetTagRequest,
+)
 from app.models.user import User
 
 from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
@@ -175,38 +184,25 @@ async def get_asset_statuses(current_user: User = Depends(get_current_user)):
             detail="Error al obtener los estados"
         )
     
-@router.post("/generate-tag")
+@router.post("/generate-tag",response_model=dict)
 #@require_roles(["admin", "inventory_manager"])
 async def generate_asset_tag_endpoint(
-    request: dict,
+    request: GenerateAssetTagRequest,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)    
 ):
     """Generar una etiqueta de activo única"""
     try:
-        category_value = request.get("category")
         
-        if not category_value:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La categoría es requerida"
-            )
-        
-        try:
-            category = AssetCategory(category_value)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Categoría inválida: {category_value}"
-            )
-        
-        tag = generate_asset_tag(db, category)
-        
-        print(f"[INFO] Tag generado: {tag} para categoría {category.value}")
+        tag = generate_asset_tag(db, request.category)
+        logger.info(
+            f"[TAG GENERADO] {tag} para categoría {request.category.value} "
+            f"por usuario {current_user.email}"
+        )
         
         return {
             "asset_tag": tag,
-            "category": category.value
+            "category": request.category.value
         }
         
     except HTTPException:
