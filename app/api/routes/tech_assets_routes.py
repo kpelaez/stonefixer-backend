@@ -1,10 +1,19 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, logger, Query, status, Request
 from sqlmodel import Session, select
 
 from app.db.database import get_db
-from app.models.asset_assignment import AssetAssignment, AssignmentStatus
-from app.models.tech_asset import AssetCategory, AssetStatus, TechAssetResponse, TechAssetSummary, TechAssetUpdate, TechAssetCreate, TechAssetWithAssignment
+
+from app.models.tech_asset import (
+    AssetCategory, 
+    AssetStatus, 
+    TechAssetResponse, 
+    TechAssetSummary, 
+    TechAssetUpdate, 
+    TechAssetCreate, 
+    TechAssetWithAssignment,
+    GenerateAssetTagRequest,
+)
 from app.models.user import User
 
 from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
@@ -48,16 +57,17 @@ def create_tech_asset_endpoint(
 @router.get("/", response_model=PaginatedResponse[TechAssetSummary])
 @limiter.limit(settings.READ_RATE_LIMIT) #200/minuto
 async def get_tech_assets_endpoint(
-    request: Request,
-    page: int = Query(1,ge=1, description="Numero de pagina (empieza en 1)"),
-    page_size: int = Query(50, ge=1, le=100, description="Registros por pagina"),
-    category: Optional[AssetCategory] = Query(None, description="Filtrar por categoria"),
-    asset_status: Optional[AssetStatus] = Query(None, alias="status", description="Filtrar por estado"),
-    search: Optional[str] = Query(None, description="Buscar por nombre, etiqueta, marca, modelo o serial "),
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)):
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=10, ge=1, le=100, description="Items por página"),
+    search: Optional[str] = Query(default=None, description="Buscar por nombre, marca, modelo, serial o tag"),
+    status: Optional[AssetStatus] = Query(default=None, description="Filtrar por estado"),
+    category: Optional[AssetCategory] = Query(default=None, description="Filtrar por categoría"),
+    location: Optional[str] = Query(default=None, description="Filtrar por ubicación"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Obtener lista de activos tecnologicos con paginacion
+    Obtener lista de activos paginada tecnologicos con paginacion
 
     **Parámetros:**
     - `page`: Número de página (1, 2, 3, ...)
@@ -73,56 +83,25 @@ async def get_tech_assets_endpoint(
 
     Rate limit: 200 request/minuto
     """
-    # Calcular offset a partir de la pagina
-    skip = (page - 1 ) * page_size
+    
 
-    # Obtener total de registros (para calcular paginas)
-    total = get_tech_assets_count(
-        db,
-        category=category,
-        status=asset_status,
-        include_deleted=False
-    )
-
-    # Calcular total de páginas
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1 # Redondeo hacia arriba
 
     try:
-        assets = get_tech_assets(db,skip=skip, limit=page_size, category=category, status=asset_status)
-        
-        assets_with_assignment = []
-        for asset in assets:
-            asset_summary = TechAssetSummary.from_orm(asset)
-
-            # Obtener asignación activa
-            current_assignment = db.exec(
-                select(AssetAssignment)
-                .where(AssetAssignment.tech_asset_id == asset.id)
-                .where(AssetAssignment.status == AssignmentStatus.ACTIVE)
-            ).first()
-            
-            if current_assignment:
-                assigned_user = db.get(User, current_assignment.assigned_to_user_id)
-                if assigned_user:
-                    asset_summary.user_assigned = f"{assigned_user.full_name}"
-            
-            assets_with_assignment.append(asset_summary)
-
-
-        return {
-            "items": assets_with_assignment,
-            "total": total,
-            "skip": skip,
-            "limit": page_size,
-            "page": page,
-            "total_pages": total_pages,
-        }
-    
+        result = get_tech_assets(
+            db=db,
+            page=page,
+            page_size=page_size,
+            search=search,
+            status=status,
+            category=category,
+            location=location,
+        )
+        return result
     except Exception as e:
-        print(f"[ERROR] Error obteniendo activos: {e}")
+        logger.error(f"Error obteniendo activos paginados: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener la lista de activos"
+            detail="Error al obtener la lista de activos",
         )
 
 @router.get("/{asset_id}", response_model=TechAssetWithAssignment)
@@ -290,38 +269,25 @@ async def get_asset_statuses(current_user: User = Depends(get_current_user)):
             detail="Error al obtener los estados"
         )
     
-@router.post("/generate-tag")
+@router.post("/generate-tag",response_model=dict)
 #@require_roles(["admin", "inventory_manager"])
 async def generate_asset_tag_endpoint(
-    request: dict,
+    request: GenerateAssetTagRequest,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)    
 ):
     """Generar una etiqueta de activo única"""
     try:
-        category_value = request.get("category")
         
-        if not category_value:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La categoría es requerida"
-            )
-        
-        try:
-            category = AssetCategory(category_value)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Categoría inválida: {category_value}"
-            )
-        
-        tag = generate_asset_tag(db, category)
-        
-        print(f"[INFO] Tag generado: {tag} para categoría {category.value}")
+        tag = generate_asset_tag(db, request.category)
+        logger.info(
+            f"[TAG GENERADO] {tag} para categoría {request.category.value} "
+            f"por usuario {current_user.email}"
+        )
         
         return {
             "asset_tag": tag,
-            "category": category.value
+            "category": request.category.value
         }
         
     except HTTPException:

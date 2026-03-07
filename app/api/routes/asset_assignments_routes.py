@@ -1,5 +1,6 @@
+import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlmodel import Session
 
 from app.db.database import get_db
@@ -34,7 +35,7 @@ from app.services.asset_assignment_service import (
 )
 
 router = APIRouter()
-
+logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.CRITICAL_WRITE_RATE_LIMIT) # 20/minuto
@@ -66,15 +67,46 @@ async def assign_asset(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
 
 
-@router.get("/", response_model=List[AssetAssignmentWithDetails])
-async def get_assignments_endpoint(user_id: Optional[int] = None, asset_id: Optional[int] = None, active_only: bool = False, db: Session = Depends(get_db)):
-    """"Obtener lista de asignaciones de activos"""
-    return get_assignments(
-        db=db,
-        user_id=user_id,
-        asset_id= asset_id,
-        active_only=active_only
-    )
+@router.get("/")
+async def get_assignments_endpoint(
+    page: int = Query(default=1, ge=1, description="Numero de pagina"),
+    page_size: int = Query(default=10, ge=1, le=100, description="Items por pagina"),
+    status: Optional[AssignmentStatus] = Query(default=None, description="Filtrar por estado"),
+    user_id: Optional[int] = None, 
+    asset_id: Optional[int] = None,
+    search: Optional[str] = Query(default=None, description="Buscar por activo o empleado"), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    ):
+    """"
+    Obtener lista de asignaciones de activos
+
+    Respuesta:
+       json
+    {
+        "items": [...],
+        "total": 25,
+        "page": 1,
+        "page_size": 10,
+        "total_pages": 3
+    }
+    """
+    try:
+        return get_assignments(
+            db=db,
+            user_id=user_id,
+            asset_id=asset_id,
+            status=status,
+            search=search,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        logger.error(f"Error obteniendo asignaciones: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener la lista de asignaciones",
+        )
 
 @router.get("/my-assets", response_model=List[AssetAssignmentWithDetails])
 async def get_my_assignments(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

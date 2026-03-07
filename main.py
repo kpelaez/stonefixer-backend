@@ -16,23 +16,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Importar routers existentes refactorizados
-from app.api.routes.auth_routes import router as auth_router
-from app.api.routes.users_routes import router as users_router
+# Log del entorno al arrancar (sin mostrar secrets)
+logger.info(f"Iniciando {settings.APP_NAME}")
+logger.info(f"Entorno: {settings.ENVIRONMENT}")
+logger.info(f"Debug: {settings.DEBUG}")
 
 # Importacion de todos los modelos
 from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetMaintenance)
-# from app.models.user import User
-# from app.models.role import Role
-# from app.models.tech_asset import TechAsset
-# from app.models.asset_assignment import AssetAssignment
-# from app.models.asset_maintenance import AssetMaintenance
 
 # Crear tablas
 create_db_and_tables()
 
-
-# Importacion de nuevos routers
+# Importar routers existentes refactorizados
+from app.api.routes.auth_routes import router as auth_router
+from app.api.routes.users_routes import router as users_router
+# Importacion de rutas de documento de asignaciones de activos
+from app.api.routes.assignment_documents_routes import router as assignment_documents_router
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
@@ -41,23 +40,27 @@ from app.api.routes.business_indicators_routes_final import router as business_i
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 
 
-app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG, version="1.0.0")
-
-# RATE LIMITER
-# ============================================================================
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app = FastAPI(
+    title=settings.APP_NAME,
+    docs_url="/docs" if not settings.is_production() else None,
+    redoc_url="/redoc" if not settings.is_production() else None,
+    openapi_url="/openapi.json" if not settings.is_production() else None,
+)
+    
 
 register_exception_handlers(app)
 
 # Configurar CORS
+
+allowed_origins = settings.get_allowed_origins()
+logger.info(f"🌐 CORS permitido para: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["*"],
-    max_age=3600
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Middleware personalizado para logging de rendimiento
@@ -116,26 +119,30 @@ app.include_router(shift_schedule_router, prefix="/api/shift-schedules", tags=["
 # app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
 app.include_router(business_indicators_router_final, prefix="/api/business-indicators", tags=["Business Indicators"])
 
+# RUTAS DE INTEGRACIO CON HUMAND
+app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
 
-
-# HEALTH CHECK
-# ============================================================================
-@app.get("/health")
-@limiter.exempt  # No aplicar rate limit al health check
-async def health_check():
-    """Endpoint para verificar que la API está funcionando"""
+# ─── Health check ─────────────────────────────────────────────────────────────
+@app.get("/health", tags=["Sistema"])
+def health_check():
+    """Endpoint de salud para monitoreo y load balancers"""
     return {
-        "status": "healthy",
+        "status": "ok",
+        "app": settings.APP_NAME,
         "environment": settings.ENVIRONMENT,
-        "version": "1.0.0"
     }
 
 
-# Endpoint de ingreso al servidor
-@app.get("/")
+@app.get("/", tags=["Sistema"])
 def read_root():
-    return {"message": "Bienvenido al servicio de autenticación de StoneFixer"}
+    return {"message": f"Bienvenido a {settings.APP_NAME}"}
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.DEBUG)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.is_development(),
+    )

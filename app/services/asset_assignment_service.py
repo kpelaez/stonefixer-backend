@@ -118,9 +118,32 @@ def get_assignment(db: Session, assignment_id: int):
     )
 
 
-def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Optional[int]= None, active_only: bool = False):
-    """Obtener lista de asignaciones con filtros"""
-    
+def get_assignments(
+        db: Session, 
+        user_id: Optional[int] = None, 
+        asset_id: Optional[int]= None, 
+        status: Optional[AssignmentStatus] = None,
+        search: Optional[str] = None, 
+        page: int = 1, 
+        page_size: int = 10
+    ):
+    """
+    Obtener lista de asignaciones con filtros
+    Args:
+        db: Sesión de base de datos
+        user_id: Filtrar por usuario asignado
+        asset_id: Filtrar por activo
+        status: Filtrar por estado (active, returned, transferred, lost, damaged)
+        search: Buscar por nombre de activo, serial, asset_tag o nombre de empleado
+        page: Número de página (inicia en 1)
+        page_size: Items por página (máx 100)
+
+    Returns:
+        dict: { items, total, page, page_size, total_pages }
+    """
+    page = max(1, page)
+    page_size = min(max(1,page_size), 100)
+
     query = select(AssetAssignment)
 
     # Aplicar Filtros
@@ -130,12 +153,67 @@ def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Option
     if asset_id:
         query = query.where(AssetAssignment.tech_asset_id == asset_id)
     
-    if active_only:
-        query = query.where(AssetAssignment.status == AssignmentStatus.ACTIVE)
+    if status:
+        query = query.where(AssetAssignment.status == status)
+
+    if search:
+        # Para buscar en campos de tablas relacionadas hacemos subqueries
+        search_term = f"%{search.strip()}%"
+
+        # Activos que coinciden con la búsqueda
+        matching_asset_ids = select(TechAsset.id).where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+        )
+
+        # Usuarios que coinciden con la búsqueda
+        matching_user_ids = select(User.id).where(
+            User.full_name.ilike(search_term)
+            | User.email.ilike(search_term)
+        )
+
+        query = query.where(
+            AssetAssignment.tech_asset_id.in_(matching_asset_ids)
+            | AssetAssignment.assigned_to_user_id.in_(matching_user_ids)
+        )
     
-    # Ordenar por fecha de asignación (más recientes primero)
+
+    # COUNT total antes de paginar
+    from sqlmodel import func
+    count_query = select(func.count(AssetAssignment.id))
+
+    if user_id:
+        count_query = count_query.where(AssetAssignment.assigned_to_user_id == user_id)
+    if asset_id:
+        count_query = count_query.where(AssetAssignment.tech_asset_id == asset_id)
+    if status:
+        count_query = count_query.where(AssetAssignment.status == status)
+    if search:
+        search_term = f"%{search.strip()}%"
+        matching_asset_ids = select(TechAsset.id).where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+        )
+        matching_user_ids = select(User.id).where(
+            User.full_name.ilike(search_term) | User.email.ilike(search_term)
+        )
+        count_query = count_query.where(
+            AssetAssignment.tech_asset_id.in_(matching_asset_ids)
+            | AssetAssignment.assigned_to_user_id.in_(matching_user_ids)
+        )
+
+    total = db.exec(count_query).one()
+
+    # Paginación
     query = query.order_by(AssetAssignment.created_at.desc())
-    assignments = db.exec(query).all()
+    skip = (page - 1) * page_size
+    assignments = db.exec(query.offset(skip).limit(page_size)).all()
     
     # Convertir a AssetAssignmentWithDetails
     result = []
@@ -158,7 +236,15 @@ def get_assignments(db: Session, user_id: Optional[int] = None, asset_id: Option
         )
         result.append(assignment_detail)
 
-    return result
+    total_pages = max(1, -(-total // page_size))
+
+    return {
+        "items": result,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 def update_assignment(db: Session, assignment_id: int, assignment_update: AssetAssignment):
     """Actualizar una asignacion"""
@@ -298,13 +384,16 @@ def delete_assignment(db: Session, assignment_id: int):
 
 def get_user_assignments(db: Session, user_id: int, active_only: bool = True):
     """Obtener asignaciones de un usuario especifico"""
+    
+    result = get_assignments(db, user_id=user_id, active_only=active_only, page_size=9999)
 
-    return get_assignments(db, user_id=user_id, active_only=active_only)
+    return result["items"]
 
 def get_asset_assignments(db: Session, asset_id: int):
     """Obtener historial de asignaciones de un activo especifico"""
+    result = get_assignments(db, asset_id=asset_id, page_size=9999)
 
-    return get_assignments(db, user_id=None ,asset_id=asset_id)
+    return result["items"]
 
 
 def get_assignment_statistics(db: Session) -> dict:
