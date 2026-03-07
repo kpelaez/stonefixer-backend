@@ -75,6 +75,8 @@ class TechAsset(TechAssetBase, table= True):
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de creacion del registro")
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
+    deleted_at: Optional[datetime] = Field(default=None, description="Fecha de eliminación (soft-delete)")
+    deleted_by_user_id: Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que eliminó")
 
     # Relaciones
     assignments: List['AssetAssignment'] = Relationship(back_populates="tech_asset")
@@ -134,6 +136,10 @@ class TechAssetSummary(SQLModel):
     location: Optional[str] = None
     department: Optional[str] = None
     purchase_price: Optional[float] = None
+    purchase_date: Optional[datetime] = None 
+    warranty_expiry: Optional[datetime] = None  
+    supplier: Optional[str] = None  
+    invoice: Optional[str] = None  
     user_assigned: Optional[str] = None
 
 class TechAssetWithAssignment(TechAssetResponse):

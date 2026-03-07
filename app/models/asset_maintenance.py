@@ -25,7 +25,7 @@ class MaintenanceStatus(str, Enum):
     SCHEDULED = "scheduled"         #Programado
     IN_PROGRESS = "in_progress"     #En progreso
     COMPLETED = "completed"         #Completado
-    CANCELLED = "cancelled"         #Cancelado
+    CANCELED = "canceled"         #Cancelado
     POSTPONED = "postponed"         #Pospuesto
     PENDING_PARTS = "pending_parts" #Esperando repuestos
 
