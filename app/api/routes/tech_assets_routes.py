@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, logger, status
+from fastapi import APIRouter, Depends, HTTPException, Query, logger, status
 from sqlmodel import Session, select
 from app.db.database import get_db
 
@@ -40,16 +40,34 @@ def create_tech_asset_endpoint(tech_asset: TechAssetCreate, db: Session = Depend
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
     
 @router.get("/", response_model=List[TechAssetSummary])
-async def get_tech_assets_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Obtener lista de activos"""
+async def get_tech_assets_endpoint(
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=10, ge=1, le=100, description="Items por página"),
+    search: Optional[str] = Query(default=None, description="Buscar por nombre, marca, modelo, serial o tag"),
+    status: Optional[AssetStatus] = Query(default=None, description="Filtrar por estado"),
+    category: Optional[AssetCategory] = Query(default=None, description="Filtrar por categoría"),
+    location: Optional[str] = Query(default=None, description="Filtrar por ubicación"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Obtener lista de activos paginada"""
+
     try:
-        assets = get_tech_assets(db)
-        return assets
+        result = get_tech_assets(
+            db=db,
+            page=page,
+            page_size=page_size,
+            search=search,
+            status=status,
+            category=category,
+            location=location,
+        )
+        return result
     except Exception as e:
-        print(f"[ERROR] Error obteniendo activos: {e}")
+        logger.error(f"Error obteniendo activos paginados: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener la lista de activos"
+            detail="Error al obtener la lista de activos",
         )
 
 @router.get("/{asset_id}", response_model=TechAssetWithAssignment)
