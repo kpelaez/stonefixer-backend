@@ -1,5 +1,5 @@
-from typing import List, Optional
-from sqlmodel import Session, or_, select
+from typing import Optional
+from sqlmodel import Session, select, func
 from datetime import datetime, timezone
 
 from app.models.tech_asset import (
@@ -10,7 +10,7 @@ from app.models.tech_asset import (
     TechAssetUpdate, 
     TechAssetWithAssignment, 
     AssetCategory, 
-    AssetStatus
+    AssetStatus,
 )
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
@@ -132,28 +132,36 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
 
 def get_tech_assets(
         db: Session,
-        skip: int = 0,
-        limit: int = 50, 
+        page: int =1, 
+        page_size: int = 10,
+        search: Optional[str] = None,
+        status: Optional[AssetStatus] = None,
         category: Optional[AssetCategory] = None,
-        status: Optional[AssetStatus] = None, 
+        location: Optional[str] = None,
         include_deleted: bool = False,
-        search: Optional[str] = None
-        ) -> List[TechAssetSummary]:
+    ):
     """
     Obtener lista de activos tecnológicos.
     
     Args:
         db: Sesión de base de datos
-        skip: Registros a saltar (para paginación)
-        limit: Máximo de registros a devolver (para paginación)
-        category: Filtro opcional por categoría
-        status: Filtro opcional por estado
+        page: Número de página (inicia en 1)
+        page_size: Cantidad de registros por página (máx 100)
+        search: Búsqueda por nombre, marca, modelo, serial o asset_tag
+        status: Filtrar por estado del activo
+        category: Filtrar por categoría
+        location: Filtrar por ubicación
         include_deleted: Si True, incluye activos eliminados (soft-deleted)
         search: Término de búsqueda (busca en nombre, asset_tag, marca, modelo, serial)
         
     Returns:
-        List[TechAssetSummary]: Lista de activos
+        dict con: iotems, total, page, page_size, total_pages
     """
+    # Validar límites para evitar queries abusivos
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+
+
     query = ( select(
         TechAsset, 
         AssetAssignment.assigned_to_user_id, 
@@ -171,105 +179,70 @@ def get_tech_assets(
     if not include_deleted:
         query = query.where(TechAsset.deleted_at.is_(None))
 
-    # Filtro: Por categoría
-    if category is not None:
-        query = query.where(TechAsset.category == category)
-    
-    # Filtro: Por estado
-    if status is not None:
+    if status:
         query = query.where(TechAsset.status == status)
-    
-    # Busqueda en multiples campos
+
+    if category:
+        query = query.where(TechAsset.category == category)
+
+    if location:
+        query = query.where(TechAsset.location.ilike(f"%{location}%"))
+
     if search:
-        search_term = f"%{search}"
+        search_term = f"%{search.strip()}%"
         query = query.where(
-            or_(
-                TechAsset.name.ilike(search_term),
-                TechAsset.asset_tag.ilike(search_term),
-                TechAsset.brand.ilike(search_term),
-                TechAsset.model.ilike(search_term),
-                TechAsset.serial_number.ilike(search_term),
-            )
+            TechAsset.name.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
         )
     
+    if status:
+        count_query = count_query.where(TechAsset.status == status)
+    if category:
+        count_query = count_query.where(TechAsset.category == category)
+    if location:
+        count_query = count_query.where(TechAsset.location.ilike(f"%{location}%"))
+    if search:
+        search_term = f"%{search.strip()}%"
+        count_query = count_query.where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+        )
+
+    total = db.exec(count_query).one()
     
     query = query.order_by(TechAsset.created_at.desc())
 
-    # Aplicar paginación
-    query = query.offset(skip).limit(limit)
+    skip = (page - 1) * page_size
+    query = query.offset(skip).limit(page_size)
     
     results = db.exec(query).all()
     
-    # # Convertir a TechAssetSummary con información de asignación
-    # assets_with_assignment = []
-    # for asset, assigned_to_id, user_name in results:
-    #     asset_summary = TechAssetSummary.from_orm(asset)
-        
-    #     # Agregar información de usuario asignado si existe
-    #     if assigned_to_id and user_name:
-    #         asset_summary.user_assigned = f"{user_name}"
-    #     else:
-    #         asset_summary.user_assigned = None
-            
-    #     assets_with_assignment.append(asset_summary)
-    
-    # return assets_with_assignment
-    return results
+    items = []
+    for asset, assigned_to_id, user_name, user_email in results:
+        asset_summary = TechAssetSummary.model_validate(asset)
 
-# FUNCIÓN: Contar total de activos (para paginación)
-def get_tech_assets_count(
-    db: Session,
-    category: Optional[AssetCategory] = None,
-    status: Optional[AssetStatus] = None,
-    include_deleted: bool = False,
-    search: Optional[str] = None
-) -> int:
-    """
-    Obtener el total de activos (para calcular páginas)
-    
-    Args:
-        db: Sesión de base de datos
-        category: Filtro opcional por categoría
-        status: Filtro opcional por estado
-        include_deleted: Si True, incluye activos eliminados
-        search: Término de búsqueda
-        
-    Returns:
-        int: Cantidad total de activos que coinciden con los filtros
-        
-    Example:
-        total = get_tech_assets_count(db)
-        total_pages = (total + limit - 1) // limit  # Redondeo hacia arriba
-    """
-    from sqlmodel import func
-    
-    query = select(func.count(TechAsset.id))
-    
-    # Aplicar mismos filtros que en get_tech_assets
-    if not include_deleted:
-        query = query.where(TechAsset.deleted_at.is_(None))
-    
-    if category is not None:
-        query = query.where(TechAsset.category == category)
-    
-    if status is not None:
-        query = query.where(TechAsset.status == status)
-    
-    # Aplicar búsqueda
-    if search:
-        search_term = f"%{search}%"
-        query = query.where(
-            or_(
-                TechAsset.name.ilike(search_term),
-                TechAsset.asset_tag.ilike(search_term),
-                TechAsset.brand.ilike(search_term),
-                TechAsset.model.ilike(search_term),
-                TechAsset.serial_number.ilike(search_term),
-            )
-        )
+        if assigned_to_id and user_name:
+            asset_summary.user_assigned = f"{user_name} ({user_email})"
+        else:
+            asset_summary.user_assigned = None
 
-    total = db.exec(query).one()
-    return total
+        items.append(asset_summary)
+
+    total_pages = max(1, -(-total // page_size))  # division sin import math
+    
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 def get_tech_asset(db: Session, tech_asset_id: int):
     """
