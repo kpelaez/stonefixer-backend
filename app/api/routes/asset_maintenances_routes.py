@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.db.database import get_db
 from app.models.user import User
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, require_admin
 
 # Modelos de Mantenimiento
 from app.models.asset_maintenance import (
@@ -41,8 +41,7 @@ from app.services.asset_maintenance_service import (
 router = APIRouter()
 
 @router.post("/", response_model=AssetMaintenanceRead, status_code=status.HTTP_201_CREATED)
-# @require_roles(["admin", "inventory_manager"])
-async def create_maintenance_endpoint(maintenance: AssetMaintenanceCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def create_maintenance_endpoint(maintenance: AssetMaintenanceCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     """Crear un nuevo registro de mantenimiento"""
     try: 
         # Si no se especifica quien lo solicitó, usar el usuario actual
@@ -69,8 +68,7 @@ async def get_maintenance_endpoint(maintenance_id: int, db: Session = Depends(ge
     return maintenance
 
 @router.patch("/{maintenance_id}", response_model=AssetMaintenanceRead)
-@require_roles(["admin", "inventory_manager"])
-async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: AssetMaintenanceUpdate, db: Session = Depends(get_db)):
+async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: AssetMaintenanceUpdate, current_user: User = Depends(require_admin),db: Session = Depends(get_db)):
     """Actualizar un mantenimiento"""
     try: 
         maintenance = update_maintenance(db, maintenance_id, maintenance_update)
@@ -81,8 +79,7 @@ async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: A
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.post("/{maintenance_id}/start", response_model= AssetMaintenanceRead)
-@require_roles(["admin", "inventory_manager"])
-async def start_maintenance_endpoint(maintenance_id: int, start_data: StartMaintenance ,db: Session = Depends(get_db)):
+async def start_maintenance_endpoint(maintenance_id: int, start_data: StartMaintenance, current_user:User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Iniciar un mantenimiento"""
     try:
         maintenance = start_maintenance(db,maintenance_id, start_data)
@@ -94,8 +91,7 @@ async def start_maintenance_endpoint(maintenance_id: int, start_data: StartMaint
     
 
 @router.post("/{maintenance_id}/complete", response_model=AssetMaintenanceRead)
-@require_roles(["admin", "inventory_manager"])
-async def complete_maintenance_endpoint(maintenance_id: int,complete_data: CompleteMaintenance, db: Session = Depends(get_db)):
+async def complete_maintenance_endpoint(maintenance_id: int,complete_data: CompleteMaintenance, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Completar un mantenimiento"""
     try: 
         maintenance = complete_maintenance(db, maintenance_id, complete_data)
@@ -106,8 +102,7 @@ async def complete_maintenance_endpoint(maintenance_id: int,complete_data: Compl
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.post("/{maintenance_id}/cancel", response_model=AssetMaintenanceRead)
-@require_roles(["admin", "inventory_manager"])
-async def cancel_maintenance_endpoint(maintenance_id: int, reason: Optional[str] = None, db: Session = Depends(get_db)):
+async def cancel_maintenance_endpoint(maintenance_id: int, reason: Optional[str] = None, current_user: User = Depends(require_admin) ,db: Session = Depends(get_db)):
     """Cancelar un mantenimiento"""
     try:
         maintenance = cancel_maintenance(db, maintenance_id, reason)
@@ -118,8 +113,7 @@ async def cancel_maintenance_endpoint(maintenance_id: int, reason: Optional[str]
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.delete("/{maintenance_id}", status_code=status.HTTP_204_NO_CONTENT)
-@require_roles(["admin"])
-async def delete_maintenance_endpoint(maintenance_id: int, db: Session = Depends(get_db)):
+async def delete_maintenance_endpoint(maintenance_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Eliminar un mantenimiento"""
     try: 
         success = delete_maintenance(db, maintenance_id)
@@ -156,8 +150,7 @@ async def get_maintenance_metrics_endpoint(date_from: Optional[datetime] = None,
     return get_maintenance_metrics(db, date_from, date_to)
 
 @router.post("/asset/{asset_id}/schedule-preventive", response_model=AssetMaintenanceRead)
-@require_roles(["admin", "invetory_manager"])
-async def schedule_preventive_maintenance_endpoint(asset_id: int, maintenance_interval_days: int = 90, db: Session = Depends(get_db)):
+async def schedule_preventive_maintenance_endpoint(asset_id: int, maintenance_interval_days: int = 90, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Programar mantenimiento preventivo automatico"""
     try:
         maintenance = schedule_preventive_maintenance(db, asset_id,maintenance_interval_days)

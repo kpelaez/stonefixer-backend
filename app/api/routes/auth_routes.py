@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from datetime import timedelta
@@ -15,13 +15,20 @@ from app.config import settings
 # Conexion con la base de datos
 from app.db.database import get_db
 
+from app.core.rate_limiter import limiter
+
 
 router = APIRouter()
 
 # Endpoint para login
 @router.post("/token")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """Endpoint para iniciar sesión y obtener un token JWT"""
+@limiter.limit(settings.LOGIN_RATE_LIMIT) # 5 intentos por minuto
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Endpoint para iniciar sesión y obtener un token JWT
+    
+    Rate Limit: 5 intentos por minuto por IP
+    """
 
     # Autenticar al usuario
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -49,7 +56,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 # Endpoint para registro
 @router.post("/register", response_model=UserRead)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/hour") # Solo 3 registros por hora por IP
+async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """Endpoint para registrar un nuevo usuario"""
 
     # Verificar si el usuario ya existe

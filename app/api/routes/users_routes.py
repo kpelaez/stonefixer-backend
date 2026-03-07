@@ -1,43 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
-from typing import List
+from typing import Any, Dict, List
 
-from app.api.deps import get_current_user, get_token_roles, require_roles
+from app.api.deps import get_current_user, RoleChecker, get_user_permissions, require_roles, require_admin
 from app.db.database import get_db
 from app.models.user import User, UserRead
 from app.services.auth import add_role_to_user, get_user_roles, remove_role_from_user
+
+from app.core.rate_limiter import limiter
+from app.config import settings
 
 
 router = APIRouter()
 
 # Endpoint para obtener informacion del usuario
 @router.get("/me", response_model=dict)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+async def get_current_user_info(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Obtener información del usuario actual"""
     try:
-        # Obtener roles del usuario actual
-        user_roles = []
-        if hasattr(current_user, 'roles') and current_user.roles:
-            for role in current_user.roles:
-                if hasattr(role, 'name'):
-                    user_roles.append(role.name)
-                else:
-                    user_roles.append(str(role))
+        # Obtener roles del usuario desde la base de datos
+        user_roles = get_user_roles(db, current_user.id)
+        
+        # Obtener permisos
+        permissions_info = get_user_permissions(current_user, db)
         
         return {
             "id": current_user.id,
             "full_name": current_user.full_name,
             "email": current_user.email,
             "department": getattr(current_user, 'department', None),
-            "role": user_roles[0] if user_roles else "user",
+            "role": user_roles[0] if user_roles else "user",  # Rol principal
             "roles": user_roles,
+            "permissions": permissions_info["permissions"],
+            "is_admin": permissions_info["is_admin"],
             "is_active": current_user.is_active,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
             "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
         }
         
     except Exception as e:
-        print(f"Error in get_current_user_info: {e}")
+        print(f"[ERROR] Error en get_current_user_info: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener información del usuario"
@@ -46,74 +50,81 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 # Endpoint para obtener los roles del usuario actual
 @router.get("/me/roles", response_model=List[str])
-async def get_current_user_roles(roles: list = Depends(get_token_roles)):
-    """Obtener los roles del usuario actual"""
-    return roles
+async def get_current_user_roles(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener los roles del usuario actual.
+    
+    Requiere: Autenticación básica
+    """
+    try:
+        user_roles = get_user_roles(db, current_user.id)
+        return user_roles
+        
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo roles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los roles del usuario"
+        )
+    
+@router.get("/me/permissions", response_model=Dict[str, Any])
+async def get_current_user_permissions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener los permisos del usuario actual.
+    
+    Retorna información detallada sobre qué puede hacer el usuario.
+    
+    Requiere: Autenticación básica
+    """
+    try:
+        permissions_info = get_user_permissions(current_user, db)
+        return permissions_info
+        
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo permisos: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los permisos del usuario"
+        )
 
 # Endpoint para añadir roles a un usuario (solo admin)
-@router.post("/{user_id}/roles/{role}")
-@require_roles(["admin"])
-async def add_role(
-    user_id: int,
-    role: str, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
-):
-    """Añadir un rol a un usuario (solo admin)"""
-    if not add_role_to_user(db, user_id, role):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"No se pudo añadir el rol '{role}' al usuario con ID {user_id}")
-    
-    return {"message": f"Rol '{role}' añadido correctamente al usuadio con ID {user_id}"}
-
-
-# Endpoint para eliminar roles de un usuario (solo admin)
-@router.delete("/{user_id}/roles/{role}")
-@require_roles(["admin"])
-async def remove_role(
-    user_id: int,
-    role: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Eliminar un rol a un usuario (solo admin)"""
-    if not remove_role_from_user(db, user_id, role):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se pudo eleminar el role '{role}' del usuario con ID {user_id}"
-        )
-    return {"message": f"Rol '{role}' eliminado correctamente del usuario con ID {user_id}"}
-
-@router.get("/", response_model=List[UserRead])
-# @require_roles(["admin"])
+@router.get("/", response_model=List[Dict[str, Any]])
 async def list_users(
-    db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
-    """"Listar todos los usuarios con sus roles (solo admin)"""
+    """
+    Listar todos los usuarios activos del sistema.
+    
+    Retorna información completa de cada usuario incluyendo roles.
+    
+    Requiere: Rol de administrador
+    """
     try:
-        statement = select(User).where(User.is_active == True)
+        # Obtener usuarios activos con paginación
+        statement = select(User).where(User.is_active == True).offset(skip).limit(limit)
         users = db.exec(statement).all()
-
-        #Para cada usuario, obtener sus roles
+        
         users_response = []
+        
         for user in users:
-            # Obtener roles del usuario de forma segura
-            user_roles = []
-            if hasattr(user, 'roles') and user.roles:
-                for role in user.roles:
-                    if hasattr(role, 'name'):
-                        user_roles.append(role.name)
-                    else:
-                        user_roles.append(str(role))
+            # Obtener roles del usuario
+            user_roles = get_user_roles(db, user.id)
             
             user_data = {
                 "id": user.id,
                 "full_name": user.full_name,
                 "email": user.email,
                 "department": getattr(user, 'department', None),
-                "role": user_roles[0] if user_roles else "user",  # Primer rol como rol principal
+                "role": user_roles[0] if user_roles else "user",  # Rol principal
                 "roles": user_roles,
                 "is_active": user.is_active,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
@@ -121,28 +132,276 @@ async def list_users(
             }
             users_response.append(user_data)
         
+        print(f"[INFO] Admin {current_user.email} listó {len(users_response)} usuarios")
         return users_response
     
     except Exception as e:
-        print(f"Error in list_users: {e}")
+        print(f"[ERROR] Error en list_users: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener usuarios"
         )
-
-
-@router.get("/{user_id}", response_model=UserRead)
-@require_roles(["admin"])
-async def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Obtener un usuario especifico (solo admin)"""
-    user = db.get(User, user_id)
-    if not user: 
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     
-    #Obtener roles del usuario
-    roles = get_user_roles(db, user.id)
-    setattr(user, "roles", roles)
+@router.get("/{user_id}", response_model=Dict[str, Any])
+async def get_user(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener información de un usuario específico.
+    
+    Requiere: Rol de administrador
+    """
+    try:
+        user = db.get(User, user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Usuario con ID {user_id} no encontrado"
+            )
+        
+        # Obtener roles del usuario
+        user_roles = get_user_roles(db, user.id)
+        
+        return {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "department": getattr(user, 'department', None),
+            "role": user_roles[0] if user_roles else "user",
+            "roles": user_roles,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": user.updated_at.isoformat() if user.updated_at else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo usuario {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener información del usuario"
+        )
 
-    return user
+@router.post("/{user_id}/roles/{role}", response_model=Dict[str, str])
+async def add_role(
+    user_id: int,
+    role: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Añadir un rol a un usuario.
+    
+    Permite a los administradores asignar roles adicionales a los usuarios.
+    
+    Requiere: Rol de administrador
+    
+    Args:
+        user_id: ID del usuario
+        role: Nombre del rol a añadir (admin, manager, inventory_manager, user)
+    """
+    try:
+        # Verificar que el usuario existe
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Usuario con ID {user_id} no encontrado"
+            )
+        
+        # Añadir el rol
+        success = add_role_to_user(db, user_id, role)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No se pudo añadir el rol '{role}'. Verifica que sea un rol válido."
+            )
+        
+        print(f"[INFO] Admin {current_user.email} añadió rol '{role}' al usuario {user_id}")
+        
+        return {
+            "message": f"Rol '{role}' añadido correctamente al usuario con ID {user_id}",
+            "user_id": str(user_id),
+            "role_added": role
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error añadiendo rol: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al añadir el rol"
+        )
+
+
+
+# Endpoint para eliminar roles de un usuario (solo admin)
+@router.delete("/{user_id}/roles/{role}", response_model=Dict[str, str])
+async def remove_role(
+    user_id: int,
+    role: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Eliminar un rol de un usuario.
+    
+    Permite a los administradores remover roles de los usuarios.
+    
+    Requiere: Rol de administrador
+    
+    Args:
+        user_id: ID del usuario
+        role: Nombre del rol a eliminar
+    """
+    try:
+        # Verificar que el usuario existe
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Usuario con ID {user_id} no encontrado"
+            )
+        
+        # Verificar que el usuario tiene el rol
+        user_roles = get_user_roles(db, user_id)
+        if role not in user_roles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El usuario no tiene el rol '{role}'"
+            )
+        
+        # No permitir eliminar el último rol
+        if len(user_roles) == 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar el último rol del usuario"
+            )
+        
+        # Eliminar el rol
+        success = remove_role_from_user(db, user_id, role)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No se pudo eliminar el rol '{role}' del usuario con ID {user_id}"
+            )
+        
+        print(f"[INFO] Admin {current_user.email} eliminó rol '{role}' del usuario {user_id}")
+        
+        return {
+            "message": f"Rol '{role}' eliminado correctamente del usuario con ID {user_id}",
+            "user_id": str(user_id),
+            "role_removed": role
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error eliminando rol: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al eliminar el rol"
+        )
+
+
+@router.get("/{user_id}/roles", response_model=List[str])
+async def get_user_roles_endpoint(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener los roles de un usuario específico.
+    
+    Requiere: Rol de administrador
+    """
+    try:
+        # Verificar que el usuario existe
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Usuario con ID {user_id} no encontrado"
+            )
+        
+        user_roles = get_user_roles(db, user_id)
+        return user_roles
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo roles del usuario {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los roles del usuario"
+        )
+
+
+# ENDPOINTS DE ESTADÍSTICAS (Solo Admin)
+
+@router.get("/stats/roles", response_model=Dict[str, Any])
+async def get_roles_statistics(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener estadísticas sobre la distribución de roles.
+    
+    Retorna información sobre cuántos usuarios tienen cada rol.
+    
+    Requiere: Rol de administrador
+    """
+    try:
+        from app.models.role import UserRole
+        from sqlalchemy import func
+        
+        # Contar usuarios por rol
+        statement = select(
+            UserRole.role,
+            func.count(UserRole.user_id).label('count')
+        ).group_by(UserRole.role)
+        
+        results = db.exec(statement).all()
+        
+        role_stats = {
+            role: count for role, count in results
+        }
+        
+        # Total de usuarios activos
+        total_users = db.exec(
+            select(func.count(User.id)).where(User.is_active == True)
+        ).one()
+        
+        return {
+            "total_users": total_users,
+            "roles_distribution": role_stats,
+            "available_roles": ["admin", "manager", "inventory_manager", "user"]
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo estadísticas de roles: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener estadísticas de roles"
+        )
+
+
+
+
+
+
