@@ -52,7 +52,7 @@ class Settings(BaseSettings):
         """
         FORBIDDEN_KEYS = {
             "secret", "secret_key", "mysecret", "changeme", "password",
-            "12345678", "harumi2023", "harumi",  # 👈 previene el valor anterior
+            "12345678", "harumi2023", "harumi",
             "test", "dev", "development",
         }
 
@@ -146,16 +146,14 @@ def get_settings() -> Settings:
         return Settings()
     except ValidationError as e:
         # Mensaje de error claro para el desarrollador/DevOps
-        print("\n" + "="*70)
-        print("❌ ERROR DE CONFIGURACIÓN - StoneFixer no puede iniciar")
+        print("ERROR DE CONFIGURACIÓN - StoneFixer no puede iniciar")
         print("="*70)
         for error in e.errors():
             field = " -> ".join(str(loc) for loc in error["loc"])
             print(f"\n  Campo: {field}")
             print(f"  Error: {error['msg']}")
-        print("\n  📋 Solución: Verificar el archivo .env o las variables de entorno")
-        print("  📋 Template:  Ver .env.example en la raíz del proyecto")
-        print("="*70 + "\n")
+        print("\nSolución: Verificar el archivo .env o las variables de entorno")
+        print("Template:  Ver .env.example en la raíz del proyecto")
         raise SystemExit(1)  # Fallo limpio, no traceback confuso
 
 

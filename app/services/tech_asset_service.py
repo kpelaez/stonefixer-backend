@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from datetime import datetime, timezone
 
 from app.models.tech_asset import (
@@ -10,7 +10,7 @@ from app.models.tech_asset import (
     TechAssetUpdate, 
     TechAssetWithAssignment, 
     AssetCategory, 
-    AssetStatus
+    AssetStatus,
 )
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
@@ -130,17 +130,37 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     
     return db_asset
 
-def get_tech_assets(db: Session, include_deleted: bool = False):
+def get_tech_assets(
+        db: Session,
+        page: int =1, 
+        page_size: int = 10,
+        search: Optional[str] = None,
+        status: Optional[AssetStatus] = None,
+        category: Optional[AssetCategory] = None,
+        location: Optional[str] = None,
+        include_deleted: bool = False,
+    ):
     """
     Obtener lista de activos tecnológicos.
     
     Args:
         db: Sesión de base de datos
+        page: Número de página (inicia en 1)
+        page_size: Cantidad de registros por página (máx 100)
+        search: Búsqueda por nombre, marca, modelo, serial o asset_tag
+        status: Filtrar por estado del activo
+        category: Filtrar por categoría
+        location: Filtrar por ubicación
         include_deleted: Si True, incluye activos eliminados (soft-deleted)
         
     Returns:
-        List[TechAssetSummary]: Lista de activos
+        dict con: iotems, total, page, page_size, total_pages
     """
+    # Validar límites para evitar queries abusivos
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+
+
     query = ( select(
         TechAsset, 
         AssetAssignment.assigned_to_user_id, 
@@ -158,25 +178,71 @@ def get_tech_assets(db: Session, include_deleted: bool = False):
     # Por defecto, excluir eliminados
     if not include_deleted:
         query = query.where(TechAsset.deleted_at.is_(None))
+
+    if status:
+        query = query.where(TechAsset.status == status)
+
+    if category:
+        query = query.where(TechAsset.category == category)
+
+    if location:
+        query = query.where(TechAsset.location.ilike(f"%{location}%"))
+
+    if search:
+        search_term = f"%{search.strip()}%"
+        query = query.where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+        )
     
-    query = query.order_by(TechAsset.created_at)
+    if status:
+        count_query = count_query.where(TechAsset.status == status)
+    if category:
+        count_query = count_query.where(TechAsset.category == category)
+    if location:
+        count_query = count_query.where(TechAsset.location.ilike(f"%{location}%"))
+    if search:
+        search_term = f"%{search.strip()}%"
+        count_query = count_query.where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+        )
+
+    total = db.exec(count_query).one()
+    
+    query = query.order_by(TechAsset.created_at.desc())
+
+    skip = (page - 1) * page_size
+    query = query.offset(skip).limit(page_size)
     
     results = db.exec(query).all()
     
-    # Convertir a TechAssetSummary con información de asignación
-    assets_with_assignment = []
+    items = []
     for asset, assigned_to_id, user_name, user_email in results:
-        asset_summary = TechAssetSummary.from_orm(asset)
-        
-        # Agregar información de usuario asignado si existe
+        asset_summary = TechAssetSummary.model_validate(asset)
+
         if assigned_to_id and user_name:
             asset_summary.user_assigned = f"{user_name} ({user_email})"
         else:
             asset_summary.user_assigned = None
-            
-        assets_with_assignment.append(asset_summary)
+
+        items.append(asset_summary)
+
+    total_pages = max(1, -(-total // page_size))  # division sin import math
     
-    return assets_with_assignment
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 def get_tech_asset(db: Session, tech_asset_id: int):
     """
