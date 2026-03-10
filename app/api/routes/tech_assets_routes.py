@@ -57,6 +57,7 @@ def create_tech_asset_endpoint(
 @router.get("/", response_model=PaginatedResponse[TechAssetSummary])
 @limiter.limit(settings.READ_RATE_LIMIT) #200/minuto
 async def get_tech_assets_endpoint(
+    request: Request,
     page: int = Query(default=1, ge=1, description="Número de página"),
     page_size: int = Query(default=10, ge=1, le=100, description="Items por página"),
     search: Optional[str] = Query(default=None, description="Buscar por nombre, marca, modelo, serial o tag"),

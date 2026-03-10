@@ -32,13 +32,18 @@ class User(UserBase, table=True):
 
 class UserCreate(UserBase):
     password: str
-    roles: List[str] = Field(default_factory=list)
+    roles: List[str] = []
 
 class UserRead(UserBase):
     id: int
     created_at: datetime
-    roles: List[str] = Field(default_factory=list)
+    roles: List[str] = []
 
 class UserLogin(SQLModel):
     email: str
     password: str
+
+class UserDNIUpdate(SQLModel):
+    """Schema para actualizar el DNI de un usuario"""
+    dni: str
+    consent: bool = False

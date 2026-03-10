@@ -1,10 +1,8 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship
 
-# Forward references para las relaciones
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .tech_asset import TechAsset
     from .user import User
@@ -57,14 +55,16 @@ class AssetAssignment(AssetAssignmentBase, table=True):
     humand_folder_id: Optional[int] = Field(default=None, description="ID de carpeta en Humand")
     
     # Relaciones
-    tech_asset: 'TechAsset' = Relationship(back_populates="assignments")
-    assigned_to_user: 'User' = Relationship(sa_relationship_kwargs={
+    tech_asset: Optional["TechAsset"] = Relationship(back_populates="assignments")
+    assigned_to_user: Optional["User"] = Relationship(sa_relationship_kwargs={
         "foreign_keys": "[AssetAssignment.assigned_to_user_id]",
-        "primaryjoin": "AssetAssignment.assigned_to_user_id == User.id"
+        "primaryjoin": "AssetAssignment.assigned_to_user_id == User.id",
+        "lazy": "select",
     })
-    assigned_by_user: Optional['User'] = Relationship(sa_relationship_kwargs={
+    assigned_by_user: Optional["User"] = Relationship(sa_relationship_kwargs={
         "foreign_keys": "[AssetAssignment.assigned_by_user_id]",
-        "primaryjoin": "AssetAssignment.assigned_by_user_id == User.id"
+        "primaryjoin": "AssetAssignment.assigned_by_user_id == User.id",
+        "lazy": "select",
     })
     
 class AssetAssignmentRead(AssetAssignmentBase):
@@ -126,5 +126,5 @@ class UserAssignmentSummary(SQLModel):
     user_email: str
     active_assignments: int
     total_assignments: int
-    assets_in_possession: List[str] = Field(default_factory=list)
+    assets_in_possession: List[str] = []
 

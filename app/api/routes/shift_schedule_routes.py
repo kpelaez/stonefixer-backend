@@ -54,7 +54,7 @@ def get_shift_schedules(
     # Enriquecer con datos del usuario
     result = []
     for shift in shifts:
-        shift_dict = shift.dict()
+        shift_dict = shift.from_orm()
         shift_dict["user_full_name"] = shift.user.full_name
         shift_dict["user_email"] = shift.user.email
         
@@ -88,7 +88,7 @@ def create_shift_schedule(
     
     # Crear turno
     new_shift = ShiftSchedule(
-        **shift_data.dict(),
+        **shift_data.from_orm(),
         user_id=current_user.id,
         department="stock"  # Hardcoded por ahora
     )
@@ -98,7 +98,7 @@ def create_shift_schedule(
     db.refresh(new_shift)
     
     # Enriquecer respuesta
-    result_dict = new_shift.dict()
+    result_dict = new_shift.from_orm()
     result_dict["user_full_name"] = new_shift.user.full_name
     result_dict["user_email"] = new_shift.user.email
     

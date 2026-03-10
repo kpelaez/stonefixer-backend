@@ -1,33 +1,34 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship
 
-# Forward references para las relaciones
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .tech_asset import TechAsset
     from .user import User
 
+
 class MaintenanceType(str, Enum):
     """Tipos de mantenimiento"""
     PREVENTIVE = "preventive"
-    CORRECTIVE = "corective"
+    CORRECTIVE = "corrective"
     UPGRADE = "upgrade"
     CLEANING = "cleaning"
     CALIBRATION = "calibration"
     REPAIR = "repair"
     REPLACEMENT = "replacement"
-    INSPECTION = "Inspection"
-    
+    INSPECTION = "inspection"
+
+
 class MaintenanceStatus(str, Enum):
     """Estados del mantenimiento"""
-    SCHEDULED = "scheduled"         #Programado
-    IN_PROGRESS = "in_progress"     #En progreso
-    COMPLETED = "completed"         #Completado
-    CANCELED = "canceled"         #Cancelado
-    POSTPONED = "postponed"         #Pospuesto
-    PENDING_PARTS = "pending_parts" #Esperando repuestos
+    SCHEDULED = "scheduled"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+    POSTPONED = "postponed"
+    PENDING_PARTS = "pending_parts"
+
 
 class MaintenancePriority(str, Enum):
     """Prioridades de mantenimiento"""
@@ -36,25 +37,26 @@ class MaintenancePriority(str, Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
+
 class AssetMaintenanceBase(SQLModel):
     """Modelo base para mantenimientos de activos"""
-    tech_asset_id: int = Field(foreign_key="tech_asset.id", description="ID del activo tecnologico")
+    tech_asset_id: int = Field(foreign_key="tech_asset.id", description="ID del activo tecnológico")
     maintenance_type: MaintenanceType = Field(description="Tipo de mantenimiento")
-    title: str = Field(description="Titulo del mantenimiento")
-    description: str = Field(description="Descripcion detallada del mantenimiento")
+    title: str = Field(description="Título del mantenimiento")
+    description: str = Field(description="Descripción detallada del mantenimiento")
     priority: MaintenancePriority = Field(default=MaintenancePriority.MEDIUM, description="Prioridad del mantenimiento")
     status: MaintenanceStatus = Field(default=MaintenanceStatus.SCHEDULED, description="Estado del mantenimiento")
 
     # Fechas
     scheduled_date: datetime = Field(description="Fecha programada para el mantenimiento")
-    estimated_duration_hours: Optional[float] = Field(default=None, ge=0, description="Duracion estimada en horas")
-    started_at: Optional[datetime] = Field(default=None, description="Fehca y hora de inicio real")
-    completed_at: Optional[datetime] = Field(default=None, description="Fecha y hora de finalizacion")
+    estimated_duration_hours: Optional[float] = Field(default=None, ge=0, description="Duración estimada en horas")
+    started_at: Optional[datetime] = Field(default=None, description="Fecha y hora de inicio real")
+    completed_at: Optional[datetime] = Field(default=None, description="Fecha y hora de finalización")
 
     # Personal responsable
-    requested_by_user_id : Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que solicito el mantenimiento")
+    requested_by_user_id: Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que solicitó el mantenimiento")
 
-    # Informacion tecnica
+    # Información técnica
     procedures_performed: Optional[str] = Field(default=None, description="Procedimientos realizados")
     parts_replaced: Optional[str] = Field(default=None, description="Partes reemplazadas")
     tools_used: Optional[str] = Field(default=None, description="Herramientas utilizadas")
@@ -64,27 +66,38 @@ class AssetMaintenanceBase(SQLModel):
     parts_cost: Optional[float] = Field(default=None, ge=0, description="Costo de repuestos")
     external_service_cost: Optional[float] = Field(default=None, ge=0, description="Costo de servicios externos")
 
-    # Informacion adicional
+    # Información adicional
     maintenance_provider: Optional[str] = Field(default=None, description="Proveedor de mantenimiento")
-    warranty_work: bool = Field(default=False, description="¿Es trabajo bajo garantia?")
+    warranty_work: bool = Field(default=False, description="¿Es trabajo bajo garantía?")
     follow_up_required: bool = Field(default=False, description="¿Requiere seguimiento?")
     follow_up_date: Optional[datetime] = Field(default=None, description="Fecha de seguimiento")
 
-    # Documentacion
+    # Documentación
     notes: Optional[str] = Field(default=None, description="Notas adicionales")
     attachments: Optional[str] = Field(default=None, description="Rutas de archivos adjuntos")
+
 
 class AssetMaintenance(AssetMaintenanceBase, table=True):
     """Modelo de tabla para mantenimientos de activos"""
     __tablename__ = "asset_maintenances"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de creacion del registro")
-    updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Fecha de creación del registro"
+    )
+    updated_at: Optional[datetime] = Field(default=None, description="Fecha de última actualización")
 
     # Relaciones
-    tech_asset: 'TechAsset' = Relationship(back_populates="maintenances")
-    requested_by_user: Optional['User'] = Relationship()
+    tech_asset: Optional["TechAsset"] = Relationship(back_populates="maintenances")
+    requested_by_user: Optional["User"] = Relationship(
+        sa_relationship_kwargs={
+            "foreign_keys": "[AssetMaintenance.requested_by_user_id]",
+            "primaryjoin": "AssetMaintenance.requested_by_user_id == User.id",
+            "lazy": "select",
+        }
+    )
+
 
 class AssetMaintenanceRead(AssetMaintenanceBase):
     """Esquema de lectura para mantenimientos"""
@@ -92,8 +105,9 @@ class AssetMaintenanceRead(AssetMaintenanceBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+
 class AssetMaintenanceCreate(SQLModel):
-    """Esquema de creacion para mantenimientos"""
+    """Esquema de creación para mantenimientos"""
     tech_asset_id: int
     maintenance_type: MaintenanceType
     title: str
@@ -101,11 +115,11 @@ class AssetMaintenanceCreate(SQLModel):
     priority: MaintenancePriority = MaintenancePriority.MEDIUM
     scheduled_date: datetime
     estimated_duration_hours: Optional[float] = None
-    assigned_technician_id: Optional[int] = None
     requested_by_user_id: Optional[int] = None
     maintenance_provider: Optional[str] = None
     warranty_work: bool = False
     notes: Optional[str] = None
+
 
 class AssetMaintenanceUpdate(SQLModel):
     """Esquema de actualización para mantenimientos"""
@@ -118,7 +132,6 @@ class AssetMaintenanceUpdate(SQLModel):
     estimated_duration_hours: Optional[float] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    assigned_technician_id: Optional[int] = None
     procedures_performed: Optional[str] = None
     parts_replaced: Optional[str] = None
     tools_used: Optional[str] = None
@@ -131,13 +144,15 @@ class AssetMaintenanceUpdate(SQLModel):
     follow_up_date: Optional[datetime] = None
     notes: Optional[str] = None
 
+
 class StartMaintenance(SQLModel):
-    """"Esquema para iniciar mantenimiento"""
+    """Esquema para iniciar mantenimiento"""
     started_at: Optional[datetime] = None
     notes: Optional[str] = None
 
+
 class CompleteMaintenance(SQLModel):
-    """Esquema para compeltar un mantenimiento"""
+    """Esquema para completar un mantenimiento"""
     completed_at: Optional[datetime] = None
     procedures_performed: Optional[str] = None
     parts_replaced: Optional[str] = None
@@ -149,7 +164,7 @@ class CompleteMaintenance(SQLModel):
     follow_up_date: Optional[datetime] = None
     notes: Optional[str] = None
 
-# Esquemas extendidos con información relacionada
+
 class AssetMaintenanceWithDetails(AssetMaintenanceRead):
     """Mantenimiento con detalles del activo y personal"""
     tech_asset_name: Optional[str] = None
@@ -159,6 +174,7 @@ class AssetMaintenanceWithDetails(AssetMaintenanceRead):
     technician_name: Optional[str] = None
     requested_by_name: Optional[str] = None
     total_cost: Optional[float] = None
+
 
 class MaintenanceSchedule(SQLModel):
     """Resumen para calendario de mantenimientos"""
@@ -171,6 +187,7 @@ class MaintenanceSchedule(SQLModel):
     status: MaintenanceStatus
     technician_name: Optional[str] = None
 
+
 class MaintenanceMetrics(SQLModel):
     """Métricas de mantenimiento"""
     total_maintenances: int
@@ -180,5 +197,3 @@ class MaintenanceMetrics(SQLModel):
     average_completion_time_hours: Optional[float] = None
     total_maintenance_cost: Optional[float] = None
     preventive_vs_corrective_ratio: Optional[float] = None
-
-
