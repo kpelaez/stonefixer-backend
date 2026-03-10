@@ -1,14 +1,12 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime, timezone
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .asset_assignment import AssetAssignment, AssetAssignmentRead
     from .asset_maintenance import AssetMaintenance
 
-#TechAssetResponse, TechAssetUpdate, TechAssetCreate
 
 class AssetStatus(str, Enum):
     """Estados posibles de un activo tecnologico"""
@@ -79,8 +77,8 @@ class TechAsset(TechAssetBase, table= True):
     deleted_by_user_id: Optional[int] = Field(default=None, foreign_key="user.id", description="Usuario que eliminó")
 
     # Relaciones
-    assignments: List['AssetAssignment'] = Relationship(back_populates="tech_asset")
-    maintenances: List['AssetMaintenance'] = Relationship(back_populates="tech_asset")
+    assignments: List["AssetAssignment"] = Relationship(back_populates="tech_asset")
+    maintenances: List["AssetMaintenance"] = Relationship(back_populates="tech_asset")
 
 class TechAssetResponse(TechAssetBase):
     """Esquema de lectura para activos tecnologicos"""
@@ -153,5 +151,3 @@ class GenerateAssetTagRequest(SQLModel):
 
     model_config = {"json_schema_extra": {"example": {"category": "Notebook"}}}
 
-from .asset_assignment import AssetAssignmentRead
-TechAssetWithAssignment.update_forward_refs(AssetAssignmentRead=AssetAssignmentRead)

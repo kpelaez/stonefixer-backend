@@ -121,7 +121,7 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
         )
     
     # Crear el activo
-    db_asset = TechAsset(**tech_asset.dict())
+    db_asset = TechAsset(**tech_asset.model_dump())
     db_asset.created_at = datetime.now(timezone.utc)
     
     db.add(db_asset)
@@ -129,6 +129,37 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     db.refresh(db_asset)
     
     return db_asset
+
+def get_tech_assets_count(
+    db: Session,
+    search: Optional[str] = None,
+    status: Optional[AssetStatus] = None,
+    category: Optional[AssetCategory] = None,
+    location: Optional[str] = None,
+    include_deleted: bool = False,
+) -> int:
+    """Obtener el total de activos según los filtros aplicados."""
+    count_query = select(func.count(TechAsset.id))
+
+    if not include_deleted:
+        count_query = count_query.where(TechAsset.deleted_at.is_(None))
+    if status:
+        count_query = count_query.where(TechAsset.status == status)
+    if category:
+        count_query = count_query.where(TechAsset.category == category)
+    if location:
+        count_query = count_query.where(TechAsset.location.ilike(f"%{location}%"))
+    if search:
+        search_term = f"%{search.strip()}%"
+        count_query = count_query.where(
+            TechAsset.name.ilike(search_term)
+            | TechAsset.brand.ilike(search_term)
+            | TechAsset.model.ilike(search_term)
+            | TechAsset.serial_number.ilike(search_term)
+            | TechAsset.asset_tag.ilike(search_term)
+        )
+
+    return db.exec(count_query).one()
 
 def get_tech_assets(
         db: Session,
@@ -161,6 +192,15 @@ def get_tech_assets(
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
 
+    # Total con los mismos filtros
+    total = get_tech_assets_count(
+        db=db,
+        search=search,
+        status=status,
+        category=category,
+        location=location,
+        include_deleted=include_deleted,
+    )
 
     query = ( select(
         TechAsset, 
@@ -197,51 +237,24 @@ def get_tech_assets(
             | TechAsset.serial_number.ilike(search_term)
             | TechAsset.asset_tag.ilike(search_term)
         )
-    
-    if status:
-        count_query = count_query.where(TechAsset.status == status)
-    if category:
-        count_query = count_query.where(TechAsset.category == category)
-    if location:
-        count_query = count_query.where(TechAsset.location.ilike(f"%{location}%"))
-    if search:
-        search_term = f"%{search.strip()}%"
-        count_query = count_query.where(
-            TechAsset.name.ilike(search_term)
-            | TechAsset.brand.ilike(search_term)
-            | TechAsset.model.ilike(search_term)
-            | TechAsset.serial_number.ilike(search_term)
-            | TechAsset.asset_tag.ilike(search_term)
-        )
 
-    total = db.exec(count_query).one()
-    
     query = query.order_by(TechAsset.created_at.desc())
-
-    skip = (page - 1) * page_size
-    query = query.offset(skip).limit(page_size)
+    query = query.offset((page - 1)*page_size).limit(page_size)
     
     results = db.exec(query).all()
     
     items = []
-    for asset, assigned_to_id, user_name, user_email in results:
+    for asset, assigned_to_id, user_name in results:
         asset_summary = TechAssetSummary.model_validate(asset)
-
-        if assigned_to_id and user_name:
-            asset_summary.user_assigned = f"{user_name} ({user_email})"
-        else:
-            asset_summary.user_assigned = None
-
+        asset_summary.user_assigned = f"{user_name}" if (assigned_to_id and user_name) else None
         items.append(asset_summary)
-
-    total_pages = max(1, -(-total // page_size))  # division sin import math
     
     return {
         "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": total_pages,
+        "total_pages": max(1, -(-total // page_size)),
     }
 
 def get_tech_asset(db: Session, tech_asset_id: int):
@@ -273,7 +286,7 @@ def get_tech_asset(db: Session, tech_asset_id: int):
     ).first()
     
     # Crear respuesta con información de asignación
-    asset_data = TechAssetWithAssignment.from_orm(asset)
+    asset_data = TechAssetWithAssignment.model_validate(asset)
     
     if current_assignment:
         from app.models.user import User
@@ -286,9 +299,7 @@ def get_tech_asset(db: Session, tech_asset_id: int):
 def update_tech_asset(db: Session, tech_asset_id: int, tech_asset_update: TechAssetUpdate):
     """
     Actualizar un activo tecnológico.
-    
-    FIX BUG #3: Ahora valida transiciones de estado.
-    
+        
     Args:
         db: Sesión de base de datos
         tech_asset_id: ID del activo a actualizar
@@ -310,8 +321,8 @@ def update_tech_asset(db: Session, tech_asset_id: int, tech_asset_update: TechAs
         return None
     
     # Obtener datos de actualización excluyendo campos no establecidos
-    update_data = tech_asset_update.dict(exclude_unset=True)
-    
+    update_data = tech_asset_update.model_dump(exclude_unset=True)
+
     # Verificar unicidad de asset_tag si se está actualizando
     if "asset_tag" in update_data and update_data["asset_tag"]:
         existing_tag = db.exec(
@@ -440,7 +451,6 @@ def delete_tech_asset(
         db.delete(asset)
         db.commit()
     else:
-        # FIX BUG #2: Soft delete con auditoría
         asset.deleted_at = datetime.now(timezone.utc)
         asset.deleted_by_user_id = deleted_by_user_id
         asset.updated_at = datetime.now(timezone.utc)
