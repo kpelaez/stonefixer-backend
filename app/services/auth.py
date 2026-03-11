@@ -114,11 +114,17 @@ def add_role_to_user(db: Session, user_id: int, role: str) -> bool:
     if role not in valid_roles:
         return False
     
-    #Verificar si el usuario ya tiene el rol a añadir
-    if has_role(db, user_id, role):
-        return True
-    
-    #Añadir el rol
+    # Verificar si el usuario ya tiene el rol consultando directo a la DB
+    existing = db.exec(
+        select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role == role,
+        )
+    ).first()
+
+    if existing:
+        return True  # Idempotente: ya lo tiene, no es un error
+
     user_role = UserRole(user_id=user_id, role=role)
     db.add(user_role)
     db.commit()
