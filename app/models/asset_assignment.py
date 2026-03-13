@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, TYPE_CHECKING
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import Column, SQLModel, Field, Relationship, String
 
 if TYPE_CHECKING:
     from .tech_asset import TechAsset
@@ -24,7 +24,7 @@ class AssetAssignmentBase(SQLModel):
     assigned_date: datetime = Field(default_factory= lambda: datetime.now(timezone.utc), description="Fecha de asignación")
     expected_return_date: Optional[datetime] = Field(default=None, description="Fecha esperada de devoluciones")
     actual_return_date: Optional[datetime] = Field(default=None, description="Fecha real de devolución")
-    status: AssignmentStatus = Field(default=AssignmentStatus.ACTIVE, description="Estado de la asignación")
+    status: AssignmentStatus = Field(default=AssignmentStatus.ACTIVE, sa_column=Column(String, nullable=False, default="active"), description="Estado de la asignación")
     accessories: Optional[str] = Field(default=None, description="Accesorios entregados con el activo")
 
     # Informacion adicional

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Integer, Session, select, func
+from sqlmodel import Integer, Session, col, select, func, text
 from datetime import date as date_type, datetime, timedelta
 from typing import List, Optional
+import logging
 
 from app.db.database import get_db
 from app.models.role import UserRole
@@ -10,10 +11,11 @@ from app.models.shift_schedule import (
     ShiftScheduleRead, ShiftScheduleStats, ShiftType, ShiftStatus
 )
 from app.models.user import User
-from app.api.deps import get_current_user, require_roles, get_user_roles
+from app.api.deps import get_current_user, get_user_roles
 from app.services.shift_schedule_service import ShiftScheduleService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def get_user_roles_list(user_id: int, db: Session) -> list[str]:
     """Helper para obtener roles del usuario"""
@@ -21,6 +23,27 @@ def get_user_roles_list(user_id: int, db: Session) -> list[str]:
         select(UserRole.role).where(UserRole.user_id == user_id)
     ).all()
     return list(user_roles)
+
+def _build_shift_read(shift: ShiftSchedule) -> ShiftScheduleRead:
+    """
+    Construir ShiftScheduleRead desde un objeto ShiftSchedule.
+    """
+    return ShiftScheduleRead(
+        id=shift.id,
+        user_id=shift.user_id,
+        department=shift.department,
+        date=shift.date,
+        shift_type=shift.shift_type,
+        status=shift.status,
+        notes=shift.notes,
+        created_at=shift.created_at,
+        updated_at=shift.updated_at,
+        modified_by_user_id=shift.modified_by_user_id,
+        user_full_name=shift.user.full_name if shift.user else "Sin asignar",
+        user_email=shift.user.email if shift.user else "",
+        modified_by_full_name=shift.modified_by.full_name if shift.modified_by else None,
+    )
+
 
 @router.get("/", response_model=List[ShiftScheduleRead])
 def get_shift_schedules(
@@ -36,33 +59,78 @@ def get_shift_schedules(
     Obtener turnos en un rango de fechas
     Público para todos los usuarios del departamento
     """
-    query = select(ShiftSchedule).where(
-        ShiftSchedule.date >= start_date,
-        ShiftSchedule.date <= end_date,
-        ShiftSchedule.department == department,
-        ShiftSchedule.status == ShiftStatus.CONFIRMED
-    )
     
+    logger.info(f"GET shifts: {start_date} → {end_date} | dept={department}")
+
+    # FIX: usamos text() con parámetros explícitos en lugar de comparar
+    # ShiftSchedule.status == ShiftStatus.CONFIRMED
+    # Esto evita cualquier problema de conversión de enum en SQLModel/SQLAlchemy
+    raw_query = text("""
+        SELECT ss.*, 
+               u.full_name as user_full_name_raw,
+               u.email as user_email_raw,
+               mu.full_name as modified_by_full_name_raw
+        FROM shift_schedules ss
+        LEFT JOIN "user" u ON ss.user_id = u.id
+        LEFT JOIN "user" mu ON ss.modified_by_user_id = mu.id
+        WHERE ss.date >= :start_date
+          AND ss.date <= :end_date
+          AND ss.department = :department
+          AND LOWER(ss.status) = 'confirmed'
+        ORDER BY ss.date ASC
+    """)
+
+    params = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "department": department,
+    }
+
     if user_id:
-        query = query.where(ShiftSchedule.user_id == user_id)
-    
-    if shift_type:
-        query = query.where(ShiftSchedule.shift_type == shift_type)
-    
-    shifts = db.exec(query).all()
-    
-    # Enriquecer con datos del usuario
+        raw_query = text("""
+            SELECT ss.*, 
+                   u.full_name as user_full_name_raw,
+                   u.email as user_email_raw,
+                   mu.full_name as modified_by_full_name_raw
+            FROM shift_schedules ss
+            LEFT JOIN "user" u ON ss.user_id = u.id
+            LEFT JOIN "user" mu ON ss.modified_by_user_id = mu.id
+            WHERE ss.date >= :start_date
+              AND ss.date <= :end_date
+              AND ss.department = :department
+              AND LOWER(ss.status) = 'confirmed'
+              AND ss.user_id = :user_id
+            ORDER BY ss.date ASC
+        """)
+        params["user_id"] = user_id
+
+    rows = db.exec(raw_query, params=params).mappings().all()
+
+    logger.info(f"Turnos encontrados: {len(rows)}")
+
     result = []
-    for shift in shifts:
-        shift_dict = shift.from_orm()
-        shift_dict["user_full_name"] = shift.user.full_name
-        shift_dict["user_email"] = shift.user.email
-        
-        if shift.modified_by:
-            shift_dict["modified_by_full_name"] = shift.modified_by.full_name
-        
-        result.append(ShiftScheduleRead(**shift_dict))
-    
+    for row in rows:
+        try:
+            shift_read = ShiftScheduleRead(
+                id=row["id"],
+                user_id=row["user_id"],
+                department=row["department"],
+                date=row["date"],
+                shift_type=row["shift_type"],
+                status=row["status"],
+                notes=row.get("notes"),
+                created_at=row["created_at"],
+                updated_at=row.get("updated_at"),
+                modified_by_user_id=row.get("modified_by_user_id"),
+                user_full_name=row.get("user_full_name_raw") or "Sin asignar",
+                user_email=row.get("user_email_raw") or "",
+                modified_by_full_name=row.get("modified_by_full_name_raw"),
+            )
+            result.append(shift_read)
+        except Exception as e:
+            logger.error(f"Error construyendo ShiftScheduleRead para row {row.get('id')}: {e}")
+            continue
+
     return result
 
 
@@ -78,17 +146,13 @@ def create_shift_schedule(
     # Validaciones
     ShiftScheduleService.validate_date(shift_data.date)
     
-    ShiftScheduleService.validate_early_shift_capacity(
-        db, shift_data.date, shift_data.shift_type
-    )
+    ShiftScheduleService.validate_early_shift_capacity(db, shift_data.date, shift_data.shift_type)
     
-    ShiftScheduleService.validate_duplicate_assignment(
-        db, current_user.id, shift_data.date
-    )
+    ShiftScheduleService.validate_duplicate_assignment(db, current_user.id, shift_data.date)
     
     # Crear turno
     new_shift = ShiftSchedule(
-        **shift_data.from_orm(),
+        **shift_data.model_dump(),
         user_id=current_user.id,
         department="stock"  # Hardcoded por ahora
     )
@@ -97,12 +161,7 @@ def create_shift_schedule(
     db.commit()
     db.refresh(new_shift)
     
-    # Enriquecer respuesta
-    result_dict = new_shift.from_orm()
-    result_dict["user_full_name"] = new_shift.user.full_name
-    result_dict["user_email"] = new_shift.user.email
-    
-    return ShiftScheduleRead(**result_dict)
+    return _build_shift_read(new_shift)
 
 
 @router.patch("/{shift_id}", response_model=ShiftScheduleRead)
@@ -168,24 +227,7 @@ def update_shift_schedule(
     db.commit()
     db.refresh(shift)
     
-    # Respuesta
-    result_dict = {
-        "id": shift.id,
-        "user_id": shift.user_id,
-        "department": shift.department,
-        "date": shift.date,
-        "shift_type": shift.shift_type,
-        "status": shift.status,
-        "notes": shift.notes,
-        "created_at": shift.created_at,
-        "updated_at": shift.updated_at,
-        "user_full_name": shift.user.full_name,
-        "user_email": shift.user.email,
-        "modified_by_user_id": shift.modified_by_user_id,
-        "modified_by_full_name": shift.modified_by.full_name if shift.modified_by else None
-    }
-    
-    return ShiftScheduleRead(**result_dict)
+    return _build_shift_read(shift)
 
 
 @router.delete("/{shift_id}", status_code=204)
@@ -259,7 +301,7 @@ def get_shift_statistics(
             ShiftSchedule.date >= start_date,
             ShiftSchedule.date <= end_date,
             ShiftSchedule.department == department,
-            ShiftSchedule.status == ShiftStatus.CONFIRMED
+            col(ShiftSchedule.status) == "confirmed",
         )
         .group_by(ShiftSchedule.user_id, User.full_name)
     )
