@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, logger, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlmodel import Session, select
 
 from app.db.database import get_db
@@ -22,7 +22,8 @@ from app.services.tech_asset_service import create_tech_asset, generate_asset_ta
 
 from app.core.rate_limiter import limiter
 from app.config import settings
-
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -99,9 +100,9 @@ async def get_tech_assets_endpoint(
         )
         return result
     except Exception as e:
-        logger.error(f"Error obteniendo activos paginados: {e}", exc_info=True)
+        logging.error(f"Error obteniendo activos paginados: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="Error al obtener la lista de activos",
         )
 

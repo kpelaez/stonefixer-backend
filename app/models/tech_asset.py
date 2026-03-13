@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Optional, TYPE_CHECKING
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import Column, SQLModel, Field, Relationship, String
 from datetime import datetime, timezone
 
 if TYPE_CHECKING:
@@ -43,8 +43,8 @@ class TechAssetBase(SQLModel):
     model: str = Field(description="Modelo del activo")
     serial_number: str = Field(unique = True, description="Numero de serie unico")
     asset_tag: Optional[str] = Field(default=None, unique=True, index=True, description="Etiqueta de activo de la empresa")
-    category: AssetCategory = Field(description="Categoria del activo")
-    status: AssetStatus = Field(default=AssetStatus.AVAILABLE, description="Estado actual del activo")
+    category: AssetCategory = Field(sa_column=Column(String, nullable=False))
+    status: AssetStatus = Field(default=AssetStatus.AVAILABLE, sa_column=Column(String, nullable=False, default="available"))
 
     # Informacion financiera
     purchase_price: Optional[float] = Field(default=None, ge=0, description="Precio de compra")
