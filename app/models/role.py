@@ -12,6 +12,7 @@ class Role(str, Enum):
     MANAGER = "manager"
     USER = "user"
     VIEWER = "viewer"
+    INVENTORY_MANAGER = "inventory_manager"
 
 
 class UserRole(SQLModel, table=True):
