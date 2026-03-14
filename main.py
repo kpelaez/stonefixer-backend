@@ -114,7 +114,7 @@ app.include_router(asset_assignments_router, prefix="/inventory/assignments", ta
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
 
 # RUTAS DE MODULO AGENDA STOCK
-app.include_router(shift_schedule_router, prefix="/api/shift-schedules", tags=["Shift Scheduling"])
+app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shift Scheduling"])
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
 # app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
