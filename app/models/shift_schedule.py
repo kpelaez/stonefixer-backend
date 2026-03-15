@@ -66,7 +66,6 @@ class ShiftSchedule(ShiftScheduleBase, table=True):
 
 class ShiftScheduleCreate(SQLModel):
     """Schema para crear un nuevo turno"""
-    user_id: int
     department: str = "stock"
     date: date_type
     shift_type: ShiftType
