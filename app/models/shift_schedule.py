@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import Column, SQLModel, Field, Relationship, String
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime, date as date_type, timezone
 from enum import Enum
@@ -24,8 +24,8 @@ class ShiftScheduleBase(SQLModel):
     user_id: int = Field(foreign_key="user.id", description="Usuario asignado al turno")
     department: str = Field(default="stock", index=True, description="Departamento")
     date: date_type = Field(index=True, description="Fecha del turno")
-    shift_type: ShiftType = Field(description="Tipo de turno")
-    status: ShiftStatus = Field(default=ShiftStatus.CONFIRMED, description="Estado del turno")
+    shift_type: ShiftType = Field(sa_column=Column(String, nullable=False),description="Tipo de turno")
+    status: ShiftStatus = Field(default=ShiftStatus.CONFIRMED, sa_column=Column(String, nullable=False, default="confirmed"), description="Estado del turno")
     notes: Optional[str] = Field(default=None, max_length=500, description="Notas opcionales del turno")
 
     # Auditoría
