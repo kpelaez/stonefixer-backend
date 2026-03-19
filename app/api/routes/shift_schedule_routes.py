@@ -154,7 +154,6 @@ def create_shift_schedule(
     new_shift = ShiftSchedule(
         **shift_data.model_dump(),
         user_id=current_user.id,
-        department="stock"  # Hardcoded por ahora
     )
     
     db.add(new_shift)
