@@ -18,7 +18,7 @@ from app.models.user import User
 
 from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
 from app.schemas.common import PaginatedResponse
-from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count
+from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count, get_asset_statistics, get_warranty_expiring_assets
 
 from app.core.rate_limiter import limiter
 from app.config import settings
@@ -105,6 +105,34 @@ async def get_tech_assets_endpoint(
             status_code=500,
             detail="Error al obtener la lista de activos",
         )
+
+
+@router.get("/statistics/overview")
+async def get_asset_statistics_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener estadísticas generales de activos tecnológicos"""
+    try:
+        return get_asset_statistics(db)
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener estadísticas")
+
+
+@router.get("/warranty/expiring")
+async def get_warranty_expiring_endpoint(
+    days_ahead: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener activos con garantía por vencer"""
+    try:
+        return get_warranty_expiring_assets(db, days_ahead)
+    except Exception as e:
+        logger.error(f"Error obteniendo garantías: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener garantías")
+
 
 @router.get("/{asset_id}", response_model=TechAssetWithAssignment)
 @limiter.limit(settings.READ_RATE_LIMIT) # 200/minuto

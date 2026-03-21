@@ -582,3 +582,65 @@ def generate_asset_tag(db: Session, category: AssetCategory) -> str:
         asset_tag = f"{prefix}-{new_number:03d}"
     
     return asset_tag
+
+def get_asset_statistics(db: Session) -> dict:
+    """Obtener estadísticas generales de activos tecnológicos"""
+    from datetime import date
+
+    total = db.exec(
+        select(func.count(TechAsset.id))
+        .where(TechAsset.deleted_at.is_(None))
+    ).one()
+
+    status_rows = db.exec(
+        select(TechAsset.status, func.count(TechAsset.id))
+        .where(TechAsset.deleted_at.is_(None))
+        .group_by(TechAsset.status)
+    ).all()
+
+    category_rows = db.exec(
+        select(TechAsset.category, func.count(TechAsset.id))
+        .where(TechAsset.deleted_at.is_(None))
+        .group_by(TechAsset.category)
+    ).all()
+
+    total_value = db.exec(
+        select(func.sum(TechAsset.purchase_price))
+        .where(TechAsset.deleted_at.is_(None))
+    ).one() or 0
+
+    assets_with_warranty = db.exec(
+        select(func.count(TechAsset.id))
+        .where(TechAsset.deleted_at.is_(None))
+        .where(TechAsset.warranty_expiry >= date.today())
+    ).one()
+
+    return {
+        "total_assets": total,
+        "status_distribution": {str(s): c for s, c in status_rows},
+        "category_distribution": {str(cat): c for cat, c in category_rows},
+        "total_inventory_value": float(total_value),
+        "assets_with_warranty": assets_with_warranty,
+    }
+
+
+def get_warranty_expiring_assets(db: Session, days_ahead: int = 30) -> dict:
+    """Obtener activos con garantía por vencer"""
+    from datetime import date, timedelta
+
+    today = date.today()
+    limit_date = today + timedelta(days=days_ahead)
+
+    assets = db.exec(
+        select(TechAsset)
+        .where(TechAsset.deleted_at.is_(None))
+        .where(TechAsset.warranty_expiry >= today)
+        .where(TechAsset.warranty_expiry <= limit_date)
+        .order_by(TechAsset.warranty_expiry)
+    ).all()
+
+    return {
+        "days_ahead": days_ahead,
+        "count": len(assets),
+        "assets": assets,
+    }
