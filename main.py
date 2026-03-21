@@ -35,8 +35,7 @@ from app.api.routes.assignment_documents_routes import router as assignment_docu
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-# from app.api.routes.business_indicators_routes import router as business_indicators_router
-from app.api.routes.business_indicators_routes_final import router as business_indicators_router_final
+from app.api.routes.business_indicators_routes_final import router as business_indicators_router
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 
 
@@ -116,8 +115,7 @@ app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tag
 app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shift Scheduling"])
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
-# app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
-app.include_router(business_indicators_router_final, prefix="/api/business-indicators", tags=["Business Indicators"])
+app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 # RUTAS DE INTEGRACIO CON HUMAND
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
