@@ -1,15 +1,12 @@
-from fastapi import Depends, FastAPI
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 import logging
 import secrets
 
 from app.core.exceptions import register_exception_handlers
-from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.db.database import create_db_and_tables
 from app.config import settings
 
@@ -50,15 +47,12 @@ app = FastAPI(
     openapi_url= None,
 )
 
-# Basic Auth para Swagger
-_security = HTTPBasic()    
-
 register_exception_handlers(app)
 
 # Configurar CORS
 
 allowed_origins = settings.get_allowed_origins()
-logger.info(f"🌐 CORS permitido para: {allowed_origins}")
+logger.info(f"CORS permitido para: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -127,30 +121,73 @@ app.include_router(business_indicators_router, prefix="/api/business-indicators"
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
 
 
-
-def verify_swagger_credentials(credentials: HTTPBasicCredentials = Depends(_security)):
-    correct_user = secrets.compare_digest(
-        credentials.username.encode(), settings.SWAGGER_USERNAME.encode()
-    )
-    correct_pass = secrets.compare_digest(
-        credentials.password.encode(), settings.SWAGGER_PASSWORD.encode()
-    )
-    if not (correct_user and correct_pass):
-        raise HTTPException(
-            status_code=401,
-            headers={"WWW-Authenticate": "Basic"},
-            detail="Credenciales incorrectas",
-        )
-
 @app.get("/docs", include_in_schema=False)
-async def swagger_ui(credentials: HTTPBasicCredentials = Depends(verify_swagger_credentials)):
+async def swagger_ui(request: Request):
+    # Verificar Basic Auth manualmente
+    import base64
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Basic "):
+        return Response(
+            content="Autenticación requerida",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
+        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
+        if not (correct_user and correct_pass):
+            return Response(
+                content="Credenciales incorrectas",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+            )
+    except Exception:
+        return Response(
+            content="Error de autenticación",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
         title=f"{settings.APP_NAME} — API Docs"
     )
 
+
 @app.get("/openapi.json", include_in_schema=False)
-async def openapi_schema(credentials: HTTPBasicCredentials = Depends(verify_swagger_credentials)):
+async def openapi_schema(request: Request):
+    import base64
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Basic "):
+        return Response(
+            content="Autenticación requerida",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
+        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
+        if not (correct_user and correct_pass):
+            return Response(
+                content="Credenciales incorrectas",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+            )
+    except Exception:
+        return Response(
+            content="Error de autenticación",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
     return get_openapi(
         title=settings.APP_NAME,
         version="1.0.0",
