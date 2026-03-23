@@ -188,11 +188,19 @@ async def openapi_schema(request: Request):
             headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
         )
     
-    return get_openapi(
+    # Rebuild modelos con referencias circulares antes de generar el schema
+    from app.models.tech_asset import TechAssetWithAssignment
+    TechAssetWithAssignment.model_rebuild()
+    
+    from fastapi.encoders import jsonable_encoder
+    from fastapi.responses import JSONResponse
+    schema = get_openapi(
         title=settings.APP_NAME,
         version="1.0.0",
+        description="StoneFixer API — Documentación interna",
         routes=app.routes
     )
+    return JSONResponse(content=jsonable_encoder(schema))
 
 
 
