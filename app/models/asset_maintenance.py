@@ -1,7 +1,9 @@
+# app/models/asset_maintenance.py
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, TYPE_CHECKING
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Column
+from sqlalchemy import String
 
 if TYPE_CHECKING:
     from .tech_asset import TechAsset
@@ -41,11 +43,26 @@ class MaintenancePriority(str, Enum):
 class AssetMaintenanceBase(SQLModel):
     """Modelo base para mantenimientos de activos"""
     tech_asset_id: int = Field(foreign_key="tech_asset.id", description="ID del activo tecnológico")
-    maintenance_type: MaintenanceType = Field(description="Tipo de mantenimiento")
+
+    # FIX: sa_column=Column(String) en los tres campos enum para evitar que
+    # SQLAlchemy aplique el procesador de enum nativo al leer de la DB.
+    maintenance_type: MaintenanceType = Field(
+        sa_column=Column(String, nullable=False),
+        description="Tipo de mantenimiento"
+    )
+    priority: MaintenancePriority = Field(
+        default=MaintenancePriority.MEDIUM,
+        sa_column=Column(String, nullable=False, default="medium"),
+        description="Prioridad del mantenimiento"
+    )
+    status: MaintenanceStatus = Field(
+        default=MaintenanceStatus.SCHEDULED,
+        sa_column=Column(String, nullable=False, default="scheduled"),
+        description="Estado del mantenimiento"
+    )
+
     title: str = Field(description="Título del mantenimiento")
     description: str = Field(description="Descripción detallada del mantenimiento")
-    priority: MaintenancePriority = Field(default=MaintenancePriority.MEDIUM, description="Prioridad del mantenimiento")
-    status: MaintenanceStatus = Field(default=MaintenanceStatus.SCHEDULED, description="Estado del mantenimiento")
 
     # Fechas
     scheduled_date: datetime = Field(description="Fecha programada para el mantenimiento")
@@ -160,8 +177,6 @@ class CompleteMaintenance(SQLModel):
     labor_cost: Optional[float] = None
     parts_cost: Optional[float] = None
     external_service_cost: Optional[float] = None
-    follow_up_required: bool = False
-    follow_up_date: Optional[datetime] = None
     notes: Optional[str] = None
 
 

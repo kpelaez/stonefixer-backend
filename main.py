@@ -1,11 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 import logging
+import secrets
 
 from app.core.exceptions import register_exception_handlers
-from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.db.database import create_db_and_tables
 from app.config import settings
 
@@ -35,25 +36,23 @@ from app.api.routes.assignment_documents_routes import router as assignment_docu
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-# from app.api.routes.business_indicators_routes import router as business_indicators_router
-from app.api.routes.business_indicators_routes_final import router as business_indicators_router_final
+from app.api.routes.business_indicators_routes_final import router as business_indicators_router
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 
 
 app = FastAPI(
     title=settings.APP_NAME,
-    docs_url="/docs" if not settings.is_production() else None,
-    redoc_url="/redoc" if not settings.is_production() else None,
-    openapi_url="/openapi.json" if not settings.is_production() else None,
+    docs_url= None,
+    redoc_url= None,
+    openapi_url= None,
 )
-    
 
 register_exception_handlers(app)
 
 # Configurar CORS
 
 allowed_origins = settings.get_allowed_origins()
-logger.info(f"🌐 CORS permitido para: {allowed_origins}")
+logger.info(f"CORS permitido para: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,14 +112,97 @@ app.include_router(asset_assignments_router, prefix="/inventory/assignments", ta
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
 
 # RUTAS DE MODULO AGENDA STOCK
-app.include_router(shift_schedule_router, prefix="/api/shift-schedules", tags=["Shift Scheduling"])
+app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shift Scheduling"])
 
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
-# app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
-app.include_router(business_indicators_router_final, prefix="/api/business-indicators", tags=["Business Indicators"])
+app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
 
 # RUTAS DE INTEGRACIO CON HUMAND
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui(request: Request):
+    # Verificar Basic Auth manualmente
+    import base64
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Basic "):
+        return Response(
+            content="Autenticación requerida",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
+        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
+        if not (correct_user and correct_pass):
+            return Response(
+                content="Credenciales incorrectas",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+            )
+    except Exception:
+        return Response(
+            content="Error de autenticación",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.APP_NAME} — API Docs"
+    )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def openapi_schema(request: Request):
+    import base64
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Basic "):
+        return Response(
+            content="Autenticación requerida",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
+        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
+        if not (correct_user and correct_pass):
+            return Response(
+                content="Credenciales incorrectas",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+            )
+    except Exception:
+        return Response(
+            content="Error de autenticación",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        )
+    
+    # Rebuild modelos con referencias circulares antes de generar el schema
+    from app.models.tech_asset import TechAssetWithAssignment
+    TechAssetWithAssignment.model_rebuild()
+    
+    from fastapi.encoders import jsonable_encoder
+    from fastapi.responses import JSONResponse
+    schema = get_openapi(
+        title=settings.APP_NAME,
+        version="1.0.0",
+        description="StoneFixer API — Documentación interna",
+        routes=app.routes
+    )
+    return JSONResponse(content=jsonable_encoder(schema))
+
+
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["Sistema"])

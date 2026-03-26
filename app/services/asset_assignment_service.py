@@ -370,13 +370,6 @@ def delete_assignment(db: Session, assignment_id: int):
     assignment.status = AssignmentStatus.CANCELED
     assignment.updated_at = datetime.now(timezone.utc)
 
-    # Liberar el activo si estaba asignado
-    if assignment.status == AssignmentStatus.ACTIVE:
-        tech_asset = db.get(TechAsset, assignment.tech_asset_id)
-        if tech_asset:
-            tech_asset.status = AssetStatus.AVAILABLE
-            db.add(tech_asset)
-
     db.add(assignment)
     db.commit()
 
