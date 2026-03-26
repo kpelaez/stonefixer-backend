@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Swagger
+    SWAGGER_USERNAME: str = "admin"
+    SWAGGER_PASSWORD: str = "changeme"  
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

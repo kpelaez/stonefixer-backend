@@ -71,7 +71,7 @@ async def assign_asset(
 async def get_assignments_endpoint(
     page: int = Query(default=1, ge=1, description="Numero de pagina"),
     page_size: int = Query(default=10, ge=1, le=100, description="Items por pagina"),
-    status: Optional[AssignmentStatus] = Query(default=None, description="Filtrar por estado"),
+    status_filter: Optional[AssignmentStatus] = Query(default=None, description="Filtrar por estado"),
     user_id: Optional[int] = None, 
     asset_id: Optional[int] = None,
     search: Optional[str] = Query(default=None, description="Buscar por activo o empleado"), 
@@ -96,7 +96,7 @@ async def get_assignments_endpoint(
             db=db,
             user_id=user_id,
             asset_id=asset_id,
-            status=status,
+            status=status_filter,
             search=search,
             page=page,
             page_size=page_size,
@@ -104,7 +104,7 @@ async def get_assignments_endpoint(
     except Exception as e:
         logger.error(f"Error obteniendo asignaciones: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="Error al obtener la lista de asignaciones",
         )
 
