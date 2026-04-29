@@ -113,6 +113,7 @@ class AssetAssignmentWithDetails(AssetAssignmentRead):
     assigned_to_name: Optional[str] = None
     assigned_to_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
+    assigned_to_has_dni: bool = False
     # Campos de informacion Humand
     document_sent_to_humand: bool = False
     document_sent_at: Optional[datetime] = None

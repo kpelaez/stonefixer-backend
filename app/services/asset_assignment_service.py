@@ -106,7 +106,7 @@ def get_assignment(db: Session, assignment_id: int):
 
     # Crear respuesta con detalles
     return AssetAssignmentWithDetails(
-        **assignment.dict(),
+        **assignment.model_dump(),
         tech_asset_name=tech_asset.name if tech_asset else None,
         tech_asset_serial=tech_asset.serial_number if tech_asset else None,
         tech_asset_brand=tech_asset.brand if tech_asset else None,
@@ -114,7 +114,8 @@ def get_assignment(db: Session, assignment_id: int):
         tech_asset_asset_tag=tech_asset.asset_tag if tech_asset else None,
         assigned_to_name=assigned_to_user.full_name if assigned_to_user else None,
         assigned_to_email=assigned_to_user.email if assigned_to_user else None,
-        assigned_by_name=assigned_by_user.full_name if assigned_by_user else None
+        assigned_by_name=assigned_by_user.full_name if assigned_by_user else None,
+        assigned_to_has_dni=bool(assigned_to_user.dni_encrypted) if assigned_to_user else False,
     )
 
 
