@@ -109,7 +109,7 @@ async def log_requests(request, call_next):
 app.include_router(auth_router, tags=["Autenticacion"])
 
 # RUTAS DE USUARIOS (refactorizadas)
-app.include_router(users_router, prefix="/api/users", tags=["Usuarios"])
+app.include_router(users_router, prefix="/users", tags=["Usuarios"])
 
 # RUTAS DE MODULO INVENTARIO
 app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])
