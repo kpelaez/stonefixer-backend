@@ -28,6 +28,13 @@ from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetM
 # Crear tablas
 create_db_and_tables()
 
+# Necesario para que Pydantic v2 resuelva los forward references en runtime
+from app.models.tech_asset import TechAssetWithAssignment
+from app.models.asset_assignment import AssetAssignmentRead  
+TechAssetWithAssignment.model_rebuild()
+
+logger.info("Modelos Pydantic reconstruidos correctamente")
+
 # Importar routers existentes refactorizados
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.users_routes import router as users_router
@@ -102,7 +109,7 @@ async def log_requests(request, call_next):
 app.include_router(auth_router, tags=["Autenticacion"])
 
 # RUTAS DE USUARIOS (refactorizadas)
-app.include_router(users_router, prefix="/users", tags=["Usuarios"])
+app.include_router(users_router, prefix="/api/users", tags=["Usuarios"])
 
 # RUTAS DE MODULO INVENTARIO
 app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])

@@ -138,29 +138,19 @@ async def send_assignment_document_to_humand(
     
     Permisos: Solo administradores
     """
-    # 1-6: Mismo flujo que generate_preview
-    # assignment = get_assignment(db, assignment_id)
-    # if not assignment:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail="Asignación no encontrada"
-    #     )
-    assignment = db.get(AssetAssignment, assignment_id)
+    assignment = get_assignment(db, assignment_id)
     if not assignment:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asignación no encontrada"
+        )
     
-    if assignment.document_sent_to_humand:  # ← ahora funciona
+    if assignment.document_sent_to_humand:
         raise HTTPException(
             status_code=400,
             detail=f"El documento ya fue enviado a Humand el {assignment.document_sent_at.strftime('%d/%m/%Y %H:%M')}"
         )
     
-    # Verificar que no se haya enviado antes
-    if assignment.document_sent_to_humand:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"El documento ya fue enviado a Humand el {assignment.document_sent_at.strftime('%d/%m/%Y %H:%M')}"
-        )
     
     user = db.get(User, assignment.assigned_to_user_id)
     if not user or not user.dni_encrypted:
@@ -217,7 +207,7 @@ async def send_assignment_document_to_humand(
         asset_data=asset_data
     )
     
-    # 7. Enviar a Humand
+    # Enviar a Humand
     try:
         humand_response = await humand_service.upload_assignment_document(
             employee_dni=dni,
@@ -238,7 +228,7 @@ async def send_assignment_document_to_humand(
             detail="Error interno al enviar documento"
         )
     
-    # 8. Actualizar asignación
+    # Actualizar asignación
     assignment.document_sent_to_humand = True
     assignment.document_sent_at = datetime.now(timezone.utc)
     assignment.humand_document_name = f"Asignacion_Activo_{assignment_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
