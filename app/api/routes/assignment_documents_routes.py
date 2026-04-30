@@ -84,7 +84,7 @@ async def generate_assignment_document_preview(
         "full_name": user.full_name,
         "dni": dni,
         "email": user.email,
-        "department": getattr(user, 'department', 'N/A')
+        "department": getattr(user, 'department', None) or assignment.location_of_use or 'N/A'
     }
     
     asset_data = {
@@ -180,7 +180,7 @@ async def send_assignment_document_to_humand(
         "full_name": user.full_name,
         "dni": dni,
         "email": user.email,
-        "department": getattr(user, 'department', 'N/A')
+        "department": getattr(user, 'department',  None) or assignment.location_of_use or 'N/A'
     }
     
     asset_data = {
