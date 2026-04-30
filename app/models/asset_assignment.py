@@ -82,6 +82,7 @@ class AssetAssignmentCreate(SQLModel):
     location_of_use: Optional[str] = None
     condition_at_assignment: Optional[str] = None
     assignment_notes: Optional[str] = None
+    accessories: Optional[str] = None
 
 class AssetAssignmentUpdate(SQLModel):
     """Esquema de actualización para asignaciones"""
