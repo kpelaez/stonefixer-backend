@@ -50,6 +50,8 @@ from .shift_schedule import (
     ShiftStatus,
 )
 
+from .overtime import OvertimeEntry
+
 __all__ = [
     # User
     "User", "UserBase", "UserCreate", "UserRead", "UserLogin", "UserDNIUpdate",
@@ -72,4 +74,6 @@ __all__ = [
     "ShiftSchedule", "ShiftScheduleBase", "ShiftScheduleCreate", "ShiftScheduleUpdate",
     "ShiftScheduleRead", "ShiftScheduleStats", "ShiftScheduleAlert",
     "ShiftType", "ShiftStatus",
+    # Overtime
+    "OvertimeEntry",
 ]
