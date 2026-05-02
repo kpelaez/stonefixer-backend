@@ -23,7 +23,7 @@ logger.info(f"Entorno: {settings.ENVIRONMENT}")
 logger.info(f"Debug: {settings.DEBUG}")
 
 # Importacion de todos los modelos
-from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetMaintenance)
+from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetMaintenance, OvertimeEntry)
 
 # Crear tablas
 create_db_and_tables()
@@ -45,6 +45,7 @@ from app.api.routes.asset_assignments_routes import router as asset_assignments_
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
 from app.api.routes.business_indicators_routes_final import router as business_indicators_router
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
+from app.api.routes.overtime_routes import router as overtime_router
 
 
 app = FastAPI(
@@ -109,7 +110,7 @@ async def log_requests(request, call_next):
 app.include_router(auth_router, tags=["Autenticacion"])
 
 # RUTAS DE USUARIOS (refactorizadas)
-app.include_router(users_router, prefix="/users", tags=["Usuarios"])
+app.include_router(users_router, prefix="/api/users", tags=["Usuarios"])
 
 # RUTAS DE MODULO INVENTARIO
 app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])
@@ -124,8 +125,11 @@ app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shif
 # RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
 app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
 
-# RUTAS DE INTEGRACIO CON HUMAND
+# RUTAS DE INTEGRACION CON HUMAND
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
+
+# RUTAS DE HORAS EXTRAS MANAGER
+app.include_router(overtime_router, prefix="/api/overtime", tags=["Horas Extras"])
 
 
 @app.get("/docs", include_in_schema=False)
@@ -235,3 +239,11 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.is_development(),
     )
+
+
+# TEMPORAL - borrar después del debug
+@app.on_event("startup")
+async def print_routes():
+    for route in app.routes:
+        if hasattr(route, 'methods'):
+            print(f"  {route.methods} → {route.path}")

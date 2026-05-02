@@ -15,6 +15,7 @@ from app.models.asset_assignment import AssetAssignment
 from app.models.asset_maintenance import AssetMaintenance
 from app.models.role import Role
 from app.models.user import User
+from app.models.overtime import OvertimeEntry
 
 from sqlmodel import SQLModel
 
