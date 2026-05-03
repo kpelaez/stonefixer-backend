@@ -8,7 +8,7 @@ from app.models.overtime import (
     OvertimeEntryCreate, OvertimeEntryRead, OvertimeEntryReview,
     OvertimeBalanceRead, OvertimeStatus, OvertimeType
 )
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user
 from app.services.overtime_service import (
     create_overtime_entry, review_entry, cancel_entry,
     get_balance, get_entries
@@ -24,19 +24,17 @@ MANAGER_ROLES = ["admin", "manager"]
 
 
 def _is_manager(user: User) -> bool:
-    user_roles = [r.role for r in user.roles]
-    return any(r in MANAGER_ROLES for r in user_roles)
+    return any(r.role in MANAGER_ROLES for r in user.roles)
 
 
 @router.post("/", response_model=OvertimeEntryRead, status_code=201)
 @limiter.limit(settings.WRITE_RATE_LIMIT)
 async def create_entry(
-    request: Request,                          
+    request: Request,
     data: OvertimeEntryCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Crear solicitud de HE (CREDIT) o compensatorio (DEBIT)."""
     if not _is_manager(current_user) and data.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -48,13 +46,12 @@ async def create_entry(
 @router.patch("/{entry_id}/review", response_model=OvertimeEntryRead)
 @limiter.limit(settings.WRITE_RATE_LIMIT)
 async def review(
-    request: Request,                          
+    request: Request,
     entry_id: int,
     review_data: OvertimeEntryReview,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Aprobar o rechazar una solicitud. Solo managers/admin."""
     if not _is_manager(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -66,24 +63,22 @@ async def review(
 @router.patch("/{entry_id}/cancel", response_model=OvertimeEntryRead)
 @limiter.limit(settings.WRITE_RATE_LIMIT)
 async def cancel(
-    request: Request,                          
+    request: Request,
     entry_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cancelar solicitud PENDING."""
     return cancel_entry(db, entry_id, requesting_user_id=current_user.id)
 
 
 @router.get("/balance/{user_id}", response_model=OvertimeBalanceRead)
 @limiter.limit(settings.READ_RATE_LIMIT)
 async def balance(
-    request: Request,                          
+    request: Request,
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Saldo de un usuario."""
     if not _is_manager(current_user) and user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -95,7 +90,7 @@ async def balance(
 @router.get("/", response_model=list[OvertimeEntryRead])
 @limiter.limit(settings.READ_RATE_LIMIT)
 async def list_entries(
-    request: Request,                          
+    request: Request,
     user_id: Optional[int] = Query(None),
     status: Optional[OvertimeStatus] = Query(None),
     entry_type: Optional[OvertimeType] = Query(None),
@@ -104,7 +99,6 @@ async def list_entries(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Listar entradas. Empleados solo ven las suyas."""
     effective_user_id = user_id if _is_manager(current_user) else current_user.id
     return get_entries(
         db, user_id=effective_user_id,
