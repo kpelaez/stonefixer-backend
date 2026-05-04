@@ -7,11 +7,13 @@ from app.db.database import get_db
 from app.models.tech_asset import TechAsset, AssetStatus
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
 from app.models.asset_maintenance import AssetMaintenance, MaintenanceStatus
+from app.models.user import User
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
 @router.get("/metrics")
-async def get_dashboard_metrics(db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def get_dashboard_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
     """Obtener métricas para el dashboard de inventario"""
     
     # Métricas de activos

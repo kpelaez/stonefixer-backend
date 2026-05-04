@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 from datetime import datetime
 
@@ -54,12 +54,40 @@ async def create_maintenance_endpoint(maintenance: AssetMaintenanceCreate, db: S
     
 
 @router.get("/", response_model=List[AssetMaintenanceWithDetails])
-async def get_maintenances_endpoint(status: MaintenanceStatus, maintenance_type: MaintenanceType, priority: Optional[MaintenancePriority] = None, asset_id: Optional[int] = None, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None, db: Session = Depends(get_db)):
+async def get_maintenances_endpoint(
+    maintenance_status: Optional[MaintenanceStatus] = Query(
+        default=None,
+        alias="status",  # alias para mantener compatibilidad con el frontend
+        description="Filtrar por estado del mantenimiento",
+    ), 
+    maintenance_type: Optional[MaintenanceType] = Query(
+        default=None,
+        description="Filtrar por tipo de mantenimiento",
+    ),
+    priority: Optional[MaintenancePriority] = Query(
+        default=None,
+        description="Filtrar por prioridad",
+    ),
+    asset_id: Optional[int] = Query(
+        default=None,
+        description="Filtrar por ID de activo",
+    ),
+    date_from: Optional[datetime] = Query(
+        default=None,
+        description="Fecha de inicio del rango (ISO 8601)",
+    ),
+    date_to: Optional[datetime] = Query(
+        default=None,
+        description="Fecha de fin del rango (ISO 8601)",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Obtener lista de mantenimientos con filtros"""
-    return get_maintenances(db, status, maintenance_type, priority, asset_id,date_from, date_to)
+    return get_maintenances(db, maintenance_status, maintenance_type, priority, asset_id,date_from, date_to)
 
 @router.get("/{maintenance_id}", response_model=AssetMaintenanceWithDetails)
-async def get_maintenance_endpoint(maintenance_id: int, db: Session = Depends(get_db)):
+async def get_maintenance_endpoint(maintenance_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener un mantenimiento especifico"""
     maintenance = get_maintenance(db, maintenance_id)
     if not maintenance:
@@ -68,7 +96,7 @@ async def get_maintenance_endpoint(maintenance_id: int, db: Session = Depends(ge
     return maintenance
 
 @router.patch("/{maintenance_id}", response_model=AssetMaintenanceRead)
-async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: AssetMaintenanceUpdate, current_user: User = Depends(require_admin),db: Session = Depends(get_db)):
+async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: AssetMaintenanceUpdate, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Actualizar un mantenimiento"""
     try: 
         maintenance = update_maintenance(db, maintenance_id, maintenance_update)
@@ -79,7 +107,7 @@ async def update_maintenance_endpoint(maintenance_id: int, maintenance_update: A
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.post("/{maintenance_id}/start", response_model= AssetMaintenanceRead)
-async def start_maintenance_endpoint(maintenance_id: int, start_data: StartMaintenance, current_user:User = Depends(require_admin) ,db: Session = Depends(get_db)):
+async def start_maintenance_endpoint(maintenance_id: int, start_data: StartMaintenance, current_user:User = Depends(require_admin), db: Session = Depends(get_db)):
     """Iniciar un mantenimiento"""
     try:
         maintenance = start_maintenance(db,maintenance_id, start_data)
@@ -124,7 +152,7 @@ async def delete_maintenance_endpoint(maintenance_id: int, current_user: User = 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
 @router.get("/asset/{asset_id}/history", response_model=List[AssetMaintenanceWithDetails])
-async def get_asset_maintenance_history_endpoint(asset_id: int, db: Session = Depends(get_db)):
+async def get_asset_maintenance_history_endpoint(asset_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener historial de mantenimiento de un activo especifico"""    
     from app.services.tech_asset_service import get_tech_asset
 
@@ -135,22 +163,22 @@ async def get_asset_maintenance_history_endpoint(asset_id: int, db: Session = De
     return get_asset_maintenance_history(db, asset_id)
 
 @router.get("/upcoming/schedule", response_model=List[MaintenanceSchedule])
-async def get_upcoming_schedule_endpoint(days_ahead: int = 30, db: Session = Depends(get_db)):
+async def get_upcoming_schedule_endpoint(days_ahead:  int = Query(default=30, ge=1, le=365, description="Días hacia adelante"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener mantenimientos proximos agendados"""
     return get_upcoming_maintenances(db, days_ahead)
 
 @router.get("/overdue/list", response_model=List[AssetMaintenanceWithDetails])
-async def get_overdue_maintenances_endpoint(db: Session = Depends(get_db)):
+async def get_overdue_maintenances_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener mantenimientos vencidos"""
     return get_overdue_maintenances(db)
 
 @router.get("/metrics/overview", response_model=MaintenanceMetrics)
-async def get_maintenance_metrics_endpoint(date_from: Optional[datetime] = None, date_to: Optional[datetime] = None, db: Session = Depends(get_db)):
+async def get_maintenance_metrics_endpoint(date_from: Optional[datetime] = None, date_to: Optional[datetime] = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Obtener metricas de mantenimiento"""
     return get_maintenance_metrics(db, date_from, date_to)
 
 @router.post("/asset/{asset_id}/schedule-preventive", response_model=AssetMaintenanceRead)
-async def schedule_preventive_maintenance_endpoint(asset_id: int, maintenance_interval_days: int = 90, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+async def schedule_preventive_maintenance_endpoint(asset_id: int, maintenance_interval_days: int = Query(default=90, ge=1, description="Intervalo en días"), current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Programar mantenimiento preventivo automatico"""
     try:
         maintenance = schedule_preventive_maintenance(db, asset_id,maintenance_interval_days)
@@ -162,7 +190,7 @@ async def schedule_preventive_maintenance_endpoint(asset_id: int, maintenance_in
     
 
 @router.get("/types/list")
-async def get_maintenance_types():
+async def get_maintenance_types(current_user: User = Depends(get_current_user)):
     """Obtener lista de tipos de mantenimiento"""
     return [
         {"value": mtype.value, "label": mtype.value.replace("_", " ").title()}
@@ -171,7 +199,7 @@ async def get_maintenance_types():
 
 
 @router.get("/statuses/list")
-async def get_maintenance_statuses():
+async def get_maintenance_statuses(current_user: User = Depends(get_current_user)):
     """Obtener lista de estados de mantenimiento"""
     return [
         {"value": status.value, "label": status.value.replace("_", " ").title()}
@@ -179,7 +207,7 @@ async def get_maintenance_statuses():
     ]
 
 @router.get("/priorities/list")
-async def get_maintenance_priorities():
+async def get_maintenance_priorities(current_user: User = Depends(get_current_user)):
     """Obtener lista de prioridades de mantenimiento"""
     return [
         {"value": priority.value, "label": priority.value.title()}

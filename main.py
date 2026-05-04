@@ -28,26 +28,37 @@ from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetM
 # Crear tablas
 create_db_and_tables()
 
-# Necesario para que Pydantic v2 resuelva los forward references en runtime
+# ── Resolver referencias circulares de Pydantic v2 ───────────────────────────
+# TechAssetWithAssignment referencia a AssetAssignmentRead con una forward
+# reference (string "AssetAssignmentRead") para evitar importaciones circulares
+# entre tech_asset.py y asset_assignment.py.
+#
+# Pydantic v2 NO resuelve estas referencias automáticamente en el momento de
+# la definición de la clase; es necesario llamar a model_rebuild() una vez que
+# AMBOS modelos ya están importados en el mismo contexto.
+#
+# Si se elimina esta llamada, el schema de OpenAPI y la serialización de
+# TechAssetWithAssignment fallarán con un error de forward reference.
 from app.models.tech_asset import TechAssetWithAssignment
-from app.models.asset_assignment import AssetAssignmentRead  
-TechAssetWithAssignment.model_rebuild()
+from app.models.asset_assignment import AssetAssignmentRead # necesari para el rebuild  
 
+TechAssetWithAssignment.model_rebuild()
 logger.info("Modelos Pydantic reconstruidos correctamente")
 
-# Importar routers existentes refactorizados
+
+# Importar routers 
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.users_routes import router as users_router
-# Importacion de rutas de documento de asignaciones de activos
 from app.api.routes.assignment_documents_routes import router as assignment_documents_router
 from app.api.routes.tech_assets_routes import router as tech_assets_router
 from app.api.routes.asset_assignments_routes import router as asset_assignments_router
 from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-from app.api.routes.business_indicators_routes_final import router as business_indicators_router
+from app.api.routes.business_indicators_routes import router as business_indicators_router
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 from app.api.routes.overtime_routes import router as overtime_router
+from app.api.routes.dashboard_routes import router as dashboard_router
 
-
+# Instancia de la app
 app = FastAPI(
     title=settings.APP_NAME,
     docs_url= None,
@@ -55,6 +66,7 @@ app = FastAPI(
     openapi_url= None,
 )
 
+# Handlers de error centralizado
 register_exception_handlers(app)
 
 # Configurar CORS
@@ -62,6 +74,7 @@ register_exception_handlers(app)
 allowed_origins = settings.get_allowed_origins()
 logger.info(f"CORS permitido para: {allowed_origins}")
 
+# Middlewares
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -70,7 +83,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
-# Middleware personalizado para logging de rendimiento
 @app.middleware("http")
 async def log_requests(request, call_next):
     import time
@@ -105,33 +117,20 @@ async def log_requests(request, call_next):
     
     return response
 
-
-# RUTAS DE AUTENTICACION (refactorizadas)
+# REGISTRAR ROUTERS
 app.include_router(auth_router, tags=["Autenticacion"])
-
-# RUTAS DE USUARIOS (refactorizadas)
 app.include_router(users_router, prefix="/api/users", tags=["Usuarios"])
-
-# RUTAS DE MODULO INVENTARIO
 app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])
-
 app.include_router(asset_assignments_router, prefix="/inventory/assignments", tags=["Inventario - Asignaciones"])
-
 app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
-
-# RUTAS DE MODULO AGENDA STOCK
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shift Scheduling"])
-
-# RUTAS DE BUSINESS INDICATORS (KPIs) - NUEVA
 app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
-
-# RUTAS DE INTEGRACION CON HUMAND
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
-
-# RUTAS DE HORAS EXTRAS MANAGER
 app.include_router(overtime_router, prefix="/api/overtime", tags=["Horas Extras"])
 
 
+# Swagger protegido con Basic Auth
 @app.get("/docs", include_in_schema=False)
 async def swagger_ui(request: Request):
     # Verificar Basic Auth manualmente
@@ -215,7 +214,7 @@ async def openapi_schema(request: Request):
 
 
 
-# ─── Health check ─────────────────────────────────────────────────────────────
+# Health check
 @app.get("/health", tags=["Sistema"])
 def health_check():
     """Endpoint de salud para monitoreo y load balancers"""
@@ -233,6 +232,7 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
+    
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
@@ -240,10 +240,3 @@ if __name__ == "__main__":
         reload=settings.is_development(),
     )
 
-
-# TEMPORAL - borrar después del debug
-@app.on_event("startup")
-async def print_routes():
-    for route in app.routes:
-        if hasattr(route, 'methods'):
-            print(f"  {route.methods} → {route.path}")

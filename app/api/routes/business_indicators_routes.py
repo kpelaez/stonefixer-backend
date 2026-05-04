@@ -6,7 +6,7 @@ import logging
 import asyncio
 from functools import wraps
 
-from app.db.kpi_database_optimized import get_kpi_db, get_connection_pool_stats
+from app.db.kpi_database import get_kpi_db, get_connection_pool_stats
 from app.models.business_indicators import (
     BusinessIndicator,
     BusinessIndicatorsRequest,
@@ -17,7 +17,7 @@ from app.models.business_indicators import (
 )
 
 # Importar las funciones del servicio OPTIMIZADO
-from app.services.business_indicators_service_optimized import (
+from app.services.business_indicators_service import (
     get_business_indicators,
     get_indicator_by_id,
     get_indicator_history,
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# === DECORATOR ARREGLADO PARA FASTAPI ===
+# === DECORATOR PARA FASTAPI ===
 def log_performance(endpoint_name: str):
     """Decorator CORREGIDO para FastAPI async functions"""
     def decorator(func):
@@ -45,15 +45,15 @@ def log_performance(endpoint_name: str):
                     execution_time = (end_time - start_time) * 1000
                     
                     if execution_time > 1000:
-                        logger.warning(f"⚠️ {endpoint_name} tardó {execution_time:.0f}ms")
+                        logger.warning(f"{endpoint_name} tardó {execution_time:.0f}ms")
                     else:
-                        logger.info(f"✅ {endpoint_name} completado en {execution_time:.0f}ms")
+                        logger.info(f"{endpoint_name} completado en {execution_time:.0f}ms")
                     
                     return result
                 except Exception as e:
                     end_time = time.time()
                     execution_time = (end_time - start_time) * 1000
-                    logger.error(f"❌ {endpoint_name} falló después de {execution_time:.0f}ms: {str(e)}")
+                    logger.error(f" {endpoint_name} falló después de {execution_time:.0f}ms: {str(e)}")
                     raise
             return async_wrapper
         else:
@@ -66,15 +66,15 @@ def log_performance(endpoint_name: str):
                     execution_time = (end_time - start_time) * 1000
                     
                     if execution_time > 1000:
-                        logger.warning(f"⚠️ {endpoint_name} tardó {execution_time:.0f}ms")
+                        logger.warning(f"{endpoint_name} tardó {execution_time:.0f}ms")
                     else:
-                        logger.info(f"✅ {endpoint_name} completado en {execution_time:.0f}ms")
+                        logger.info(f"{endpoint_name} completado en {execution_time:.0f}ms")
                     
                     return result
                 except Exception as e:
                     end_time = time.time()
                     execution_time = (end_time - start_time) * 1000
-                    logger.error(f"❌ {endpoint_name} falló después de {execution_time:.0f}ms: {str(e)}")
+                    logger.error(f"{endpoint_name} falló después de {execution_time:.0f}ms: {str(e)}")
                     raise
             return sync_wrapper
     return decorator
@@ -93,10 +93,10 @@ async def get_business_indicators_endpoint(
     kpi_db: Connection = Depends(get_kpi_db)
 ):
     """
-    🚀 OPTIMIZADO: Obtener todos los indicadores de negocio
+    OPTIMIZADO: Obtener todos los indicadores de negocio
     """
     try:
-        logger.info("🔄 Iniciando get_business_indicators_endpoint")
+        logger.info("Iniciando get_business_indicators_endpoint")
         
         # Crear objeto request para el servicio
         request = BusinessIndicatorsRequest(
@@ -108,13 +108,13 @@ async def get_business_indicators_endpoint(
         )
         
         # Usar servicio optimizado
-        logger.info("📊 Ejecutando consulta optimizada...")
+        logger.info("Ejecutando consulta optimizada...")
         service_start = time.time()
         result = get_business_indicators(request)
         service_end = time.time()
         
         service_time = (service_end - service_start) * 1000
-        logger.info(f"📊 Servicio completado en {service_time:.0f}ms")
+        logger.info(f"Servicio completado en {service_time:.0f}ms")
         
         # Agregar metadata de rendimiento
         result.metadata = {
@@ -125,11 +125,11 @@ async def get_business_indicators_endpoint(
             "indicators_count": len(result.indicators)
         }
         
-        logger.info(f"✅ Devolviendo {len(result.indicators)} indicadores")
+        logger.info(f"Devolviendo {len(result.indicators)} indicadores")
         return result
         
     except Exception as e:
-        logger.error(f"❌ Error en get_business_indicators_endpoint: {str(e)}")
+        logger.error(f"Error en get_business_indicators_endpoint: {str(e)}")
         raise HTTPException(
             status_code=500, 
             detail=f"Error obteniendo indicadores: {str(e)}"
@@ -145,10 +145,10 @@ async def get_indicator_by_id_endpoint(
     kpi_db: Connection = Depends(get_kpi_db)
 ):
     """
-    🚀 OPTIMIZADO: Obtener un indicador específico por ID
+    OPTIMIZADO: Obtener un indicador específico por ID
     """
     try:
-        logger.info(f"🔄 Obteniendo indicador: {indicator_id}")
+        logger.info(f"Obteniendo indicador: {indicator_id}")
         
         # Validar ID de indicador
         valid_ids = ["total_facturado", "total_cobrado", "ratio_cobranza"]
@@ -169,7 +169,7 @@ async def get_indicator_by_id_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Error obteniendo indicador {indicator_id}: {str(e)}")
+        logger.error(f"Error obteniendo indicador {indicator_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo indicador: {str(e)}")
 
 @router.get("/{indicator_id}/history", response_model=List[IndicatorHistory])
@@ -182,10 +182,10 @@ async def get_indicator_history_endpoint(
     kpi_db: Connection = Depends(get_kpi_db)
 ):
     """
-    🚀 OPTIMIZADO: Obtener el histórico de un indicador específico
+    OPTIMIZADO: Obtener el histórico de un indicador específico
     """
     try:
-        logger.info(f"🔄 Obteniendo histórico de: {indicator_id}")
+        logger.info(f"Obteniendo histórico de: {indicator_id}")
         
         # Validar ID de indicador
         valid_ids = ["total_facturado", "total_cobrado", "ratio_cobranza"]
@@ -199,7 +199,7 @@ async def get_indicator_history_endpoint(
         return result
         
     except Exception as e:
-        logger.error(f"❌ Error obteniendo histórico de {indicator_id}: {str(e)}")
+        logger.error(f"Error obteniendo histórico de {indicator_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo histórico: {str(e)}")
 
 @router.get("/health/status", response_model=IndicatorsHealth)
@@ -209,15 +209,15 @@ async def get_indicators_health_endpoint(
     kpi_db: Connection = Depends(get_kpi_db)
 ):
     """
-    🚀 OPTIMIZADO: Obtener el estado de salud de los indicadores
+    OPTIMIZADO: Obtener el estado de salud de los indicadores
     """
     try:
-        logger.info("🔄 Verificando salud de indicadores")
+        logger.info("Verificando salud de indicadores")
         result = get_indicators_health()
         return result
         
     except Exception as e:
-        logger.error(f"❌ Error obteniendo estado de salud: {str(e)}")
+        logger.error(f"Error obteniendo estado de salud: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error obteniendo estado de salud: {str(e)}")
 
 # === ENDPOINTS DE DIAGNÓSTICO AVANZADO ===
@@ -229,12 +229,12 @@ async def debug_database_performance_endpoint(
     kpi_db: Connection = Depends(get_kpi_db)
 ):
     """
-    🐛 NUEVO: Diagnóstico completo de rendimiento de base de datos
+    NUEVO: Diagnóstico completo de rendimiento de base de datos
     """
     try:
         from sqlalchemy import text
         
-        logger.info("🐛 Iniciando diagnóstico completo de base de datos...")
+        logger.info("Iniciando diagnóstico completo de base de datos...")
         
         results = {}
         
@@ -341,5 +341,5 @@ async def debug_database_performance_endpoint(
         return results
         
     except Exception as e:
-        logger.error(f"❌ Error en diagnóstico de base de datos: {str(e)}")
+        logger.error(f"Error en diagnóstico de base de datos: {str(e)}")
         raise

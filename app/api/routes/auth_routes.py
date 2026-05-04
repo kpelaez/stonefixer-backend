@@ -56,7 +56,7 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
 
 # Endpoint para registro
 @router.post("/register", response_model=UserRead)
-@limiter.limit("5/hour") # Solo 3 registros por hora por IP
+@limiter.limit("5/hour") # Solo 5 registros por hora por IP
 async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """Endpoint para registrar un nuevo usuario"""
 
@@ -68,16 +68,3 @@ async def register(request:Request, user_data: UserCreate, db: Session = Depends
         )
     # Crear y devolver el usuario
     return create_user(db, user_data)
-
-# Endpoint protegido de ejemplo
-@router.get("/me", response_model=UserRead) #<---- MODIFICAR ESTE ENDPOINT A "/me", luego modificar en FRONTEND
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    """Endpoint para obtener información del usuario actual"""
-    # Crear y devolver UserRead
-    return UserRead(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        is_active=current_user.is_active,
-        created_at=current_user.created_at
-    )
