@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     DNI_ENCRYPTION_KEY: str = ""
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://192.168.56.1:5173"
     APP_BASE_URL: str = "http://localhost:5173"
 
     # Rate Limiting
