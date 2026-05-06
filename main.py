@@ -118,16 +118,16 @@ async def log_requests(request, call_next):
     return response
 
 # REGISTRAR ROUTERS
-app.include_router(auth_router, tags=["Autenticacion"])
-app.include_router(users_router, prefix="/api/users", tags=["Usuarios"])
-app.include_router(tech_assets_router, prefix="/inventory/tech-assets",tags=["Inventario - Activos Tech"])
-app.include_router(asset_assignments_router, prefix="/inventory/assignments", tags=["Inventario - Asignaciones"])
-app.include_router(asset_maintenances_router,prefix="/inventory/maintenance",tags=["Inventario - Mantenimiento"])
+app.include_router(auth_router, prefix="/api/v1/auth" ,tags=["Autenticacion"])
+app.include_router(users_router, prefix="/api/v1/users", tags=["Usuarios"])
+app.include_router(tech_assets_router, prefix="/api/v1/inventory/tech-assets",tags=["Inventario - Activos Tech"])
+app.include_router(asset_assignments_router, prefix="/api/v1/inventory/assignments", tags=["Inventario - Asignaciones"])
+app.include_router(asset_maintenances_router,prefix="/api/v1/inventory/maintenance",tags=["Inventario - Mantenimiento"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
-app.include_router(shift_schedule_router, prefix="/shift-schedules", tags=["Shift Scheduling"])
-app.include_router(business_indicators_router, prefix="/api/business-indicators", tags=["Business Indicators"])
+app.include_router(shift_schedule_router, prefix="/api/v1/shift-schedules", tags=["Shift Scheduling"])
+app.include_router(business_indicators_router, prefix="/api/v1/business-indicators", tags=["Business Indicators"])
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
-app.include_router(overtime_router, prefix="/api/overtime", tags=["Horas Extras"])
+app.include_router(overtime_router, prefix="/api/v1/overtime", tags=["Horas Extras"])
 
 
 # Swagger protegido con Basic Auth
