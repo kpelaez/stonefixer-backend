@@ -7,6 +7,17 @@ from pydantic_settings import BaseSettings
 from pydantic import field_validator, ValidationError
 
 
+def _get_env_file() -> str:
+    env = os.getenv("ENVIRONMENT", "development")
+    env_file = f".env.{env}"
+    if os.path.exists(env_file):
+        return env_file
+    # fallback a .env si existe
+    if os.path.exists(".env"):
+        return ".env"
+    return env_file  # pydantic falle con mensaje claro
+
+
 class Settings(BaseSettings):
     """
     Configuración centralizada de StoneFixer.
@@ -146,7 +157,7 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "development"
 
     model_config = {
-        "env_file": ".env",
+        "env_file": _get_env_file(),
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
         "extra": "ignore",
@@ -162,6 +173,8 @@ def get_settings() -> Settings:
     durante todo el ciclo de vida de la aplicación.
     """
     try:
+        env_file = _get_env_file()
+        print(f" Cargando configuración desde: {env_file}")
         return Settings()
     except ValidationError as e:
         print("ERROR DE CONFIGURACIÓN - StoneFixer no puede iniciar")
