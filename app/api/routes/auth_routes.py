@@ -4,7 +4,7 @@ from sqlmodel import Session
 from datetime import timedelta
 
 # Importacion de modelos
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.models.user import User, UserRead, UserCreate
 
 # Funciones de Auth Services
@@ -89,7 +89,7 @@ async def logout(response: Response):
 # Endpoint para registro
 @router.post("/register", response_model=UserRead)
 @limiter.limit("5/hour") # Solo 5 registros por hora por IP
-async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     """Endpoint para registrar un nuevo usuario"""
 
     # Verificar si el usuario ya existe
@@ -98,5 +98,6 @@ async def register(request:Request, user_data: UserCreate, db: Session = Depends
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El email ya está registrado"
         )
+    
     # Crear y devolver el usuario
     return create_user(db, user_data)
