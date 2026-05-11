@@ -2,10 +2,13 @@ import os
 import secrets
 from functools import lru_cache
 from typing import List
+import logging
+
 
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, ValidationError
 
+logger = logging.getLogger(__name__)
 
 def _get_env_file() -> str:
     env = os.getenv("ENVIRONMENT", "development")
@@ -174,7 +177,7 @@ def get_settings() -> Settings:
     """
     try:
         env_file = _get_env_file()
-        print(f" Cargando configuración desde: {env_file}")
+        logger.info(f"Cargando configuración desde: {env_file}")
         return Settings()
     except ValidationError as e:
         print("ERROR DE CONFIGURACIÓN - StoneFixer no puede iniciar")
