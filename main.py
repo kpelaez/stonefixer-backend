@@ -81,6 +81,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    expose_headers=["X-Process-Time"],
 )
 
 @app.middleware("http")
@@ -114,6 +115,32 @@ async def log_requests(request, call_next):
     
     # Agregar header de tiempo de respuesta
     response.headers["X-Process-Time"] = str(process_time)
+    
+    return response
+
+# Middleware de Security Headers 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    
+    # Previene que el browser interprete archivos con MIME type incorrecto
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    
+    # Previene clickjacking — la app no puede ser embebida en un iframe
+    response.headers["X-Frame-Options"] = "DENY"
+    
+    # Fuerza HTTPS en producción (navegadores recuerdan esto por 1 año)
+    if settings.is_production():
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    # Controla qué información se envía en el header Referer
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Deshabilita funcionalidades del browser que no necesitamos
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    # Elimina el header que revela que usamos uvicorn/Python
+    response.headers.pop("server", None)
     
     return response
 

@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from datetime import timedelta
 
 # Importacion de modelos
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.models.user import User, UserRead, UserCreate
 
 # Funciones de Auth Services
@@ -20,10 +20,23 @@ from app.core.rate_limiter import limiter
 
 router = APIRouter()
 
+def _set_auth_cookie(response: Response, token: str) -> None:
+    """Centraliza la configuración de la cookie de auth."""
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,                          # JS no puede leerla
+        secure=settings.is_production(),        # HTTPS only en producción
+        samesite="lax",                         # Protección CSRF básica
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+
+
 # Endpoint para login
 @router.post("/token")
 @limiter.limit(settings.LOGIN_RATE_LIMIT) # 5 intentos por minuto
-async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login_for_access_token(request: Request, response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Endpoint para iniciar sesión y obtener un token JWT
     
@@ -44,20 +57,38 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
     if user.roles:
         user_roles = [user_role.role for user_role in user.roles]
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # Crear y devolver el token
     access_token = create_access_token(
         data={"sub": user.email},
-        user_roles= user_roles,
-        expires_delta=access_token_expires
-        )
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     
-    return {"access_token": access_token, "token_type": "bearer", "roles": user_roles}
+    # Setear cookie httpOnly — el token nunca viaja en el body
+    _set_auth_cookie(response, access_token)
+
+    # Devolver solo lo que el frontend necesita para UX (roles, user info)
+    # NUNCA el token en el body
+    return {
+        "message": "Login exitoso",
+        "roles": user_roles,
+        "token_type": "bearer"
+    }
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Elimina la cookie de auth."""
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        secure=settings.is_production(),
+        httponly=True,
+        samesite="lax"
+    )
+    return {"message": "Sesión cerrada exitosamente"}
 
 # Endpoint para registro
 @router.post("/register", response_model=UserRead)
 @limiter.limit("5/hour") # Solo 5 registros por hora por IP
-async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(request:Request, user_data: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     """Endpoint para registrar un nuevo usuario"""
 
     # Verificar si el usuario ya existe
@@ -66,5 +97,6 @@ async def register(request:Request, user_data: UserCreate, db: Session = Depends
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El email ya está registrado"
         )
+    
     # Crear y devolver el usuario
     return create_user(db, user_data)
