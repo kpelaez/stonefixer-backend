@@ -8,7 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Connect to Tailscale
         uses: tailscale/github-action@v2
@@ -24,10 +24,29 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
+
             cd /opt/stonefixer/backend
             git pull origin main
+
             cd /opt/stonefixer
             docker compose build backend
             docker compose up -d backend
+
+            echo "⏳ Verificando health check..."
+            for i in $(seq 1 10); do
+              if curl -sf http://localhost:8000/health > /dev/null; then
+                echo "✅ Backend healthy"
+                break
+              fi
+              if [ $i -eq 10 ]; then
+                echo "❌ Health check falló — revisar logs"
+                docker compose logs backend --tail=50
+                exit 1
+              fi
+              echo "Intento $i/10 — esperando 3s..."
+              sleep 3
+            done
+
             docker compose restart nginx
             echo "✅ Backend deployed successfully"
