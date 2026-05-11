@@ -1,9 +1,9 @@
-from fastapi import Depends, HTTPException, logger, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session
-from typing import List
+from typing import List, Optional
 from functools import wraps
 
 from app.config import settings
@@ -11,11 +11,15 @@ from app.db.database import get_db
 from app.models.user import User
 from app.services.auth import get_user_by_email, get_user_roles
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(default=None),
 ) -> User:
     """
     Obtener el usuario actual a partir del token JWT.
@@ -39,20 +43,22 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    if not access_token:
+        raise credentials_exception
+
     try:
         # Decodificar token
         payload = jwt.decode(
-            token, 
+            access_token, 
             settings.SECRET_KEY, 
             algorithms=[settings.ALGORITHM]
         )
         email: str = payload.get("sub")
-        
         if email is None:
             raise credentials_exception
         
     except InvalidTokenError:
-        logger.warning("Token JWT inválido recibido")
+        logger.warning("Token JWT inválido o expirado recibido")
         raise credentials_exception
     
     # Buscar usuario en la base de datos
