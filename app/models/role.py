@@ -11,7 +11,6 @@ class Role(str, Enum):
     ADMIN = "admin"
     MANAGER = "manager"
     USER = "user"
-    VIEWER = "viewer"
     INVENTORY_MANAGER = "inventory_manager"
 
 
