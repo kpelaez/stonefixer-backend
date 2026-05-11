@@ -7,7 +7,7 @@ Fecha: 2025-12-18
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+import jwt
 
 from app.services.auth import (
     verify_password,
