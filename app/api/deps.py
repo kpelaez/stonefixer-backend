@@ -1,6 +1,7 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, logger, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session
 from typing import List
 from functools import wraps
@@ -50,8 +51,8 @@ async def get_current_user(
         if email is None:
             raise credentials_exception
         
-    except JWTError as e:
-        print(f"Error decodificando token: {e}")
+    except InvalidTokenError:
+        logger.warning("Token JWT inválido recibido")
         raise credentials_exception
     
     # Buscar usuario en la base de datos
