@@ -262,14 +262,6 @@ def check_permission(user: User, db: Session, required_permission: str) -> bool:
     
     return required_permission in permissions["permissions"]
 
-# Función para obtener los roles del token actual
-# async def get_token_roles(token: str = Depends(oauth2_scheme)) -> list:
-#     """Extraer roles del token JWT sin verificar usuario"""
-#     try:
-#         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-#         return payload.get("roles", [])
-#     except JWTError:
-#         return []
 
 # ============================================================================
 # DECORADOR LEGACY (Para compatibilidad con código antiguo)
@@ -292,8 +284,8 @@ def require_roles(allowed_roles: List[str]):
         ):
             pass
     """
-    print(f"WARNING: @require_roles está deprecado. Usa RoleChecker en su lugar.")
-    print(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
+    logger.warning("@require_roles está deprecado. Usar RoleChecker en su lugar.")
+    logger.warning(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
     
     def decorator(func):
         @wraps(func)

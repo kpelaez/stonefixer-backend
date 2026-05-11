@@ -171,10 +171,7 @@ def create_access_token(data: dict, user_roles: List[str] ,expires_delta: timede
     else: 
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({
-        "exp": expire,
-        "roles": user_roles
-        })
+    to_encode.update({ "exp": expire })
 
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
