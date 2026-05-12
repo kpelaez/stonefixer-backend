@@ -161,7 +161,7 @@ def user_to_user_read(user: User) -> UserRead:
 
 
 # Funciones de JWT
-def create_access_token(data: dict, user_roles: List[str] ,expires_delta: timedelta | None = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """Crea un token JWT de acceso"""
     to_encode = data.copy()
     
