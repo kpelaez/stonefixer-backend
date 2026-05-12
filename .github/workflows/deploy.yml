@@ -35,7 +35,7 @@ jobs:
 
             echo "⏳ Verificando health check..."
             for i in $(seq 1 10); do
-              if curl -sf http://localhost:8000/health > /dev/null; then
+              if docker compose exec -T backend curl -sf http://localhost:8000/health > /dev/null; then
                 echo "✅ Backend healthy"
                 break
               fi
