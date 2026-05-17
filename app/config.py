@@ -2,10 +2,13 @@ import os
 import secrets
 from functools import lru_cache
 from typing import List
+import logging
+
 
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, ValidationError
 
+logger = logging.getLogger(__name__)
 
 def _get_env_file() -> str:
     env = os.getenv("ENVIRONMENT", "development")
@@ -51,7 +54,7 @@ class Settings(BaseSettings):
     DNI_ENCRYPTION_KEY: str = ""
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://192.168.56.1:5173"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://192.168.56.1:5173,http://192.168.0.146:5173,http://192.168.0.140:5173"
     APP_BASE_URL: str = "http://localhost:5173"
 
     # Rate Limiting
@@ -67,7 +70,7 @@ class Settings(BaseSettings):
 
     # Swagger
     SWAGGER_USERNAME: str = "admin"
-    SWAGGER_PASSWORD: str = "changeme"  
+    SWAGGER_PASSWORD: str
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -174,7 +177,7 @@ def get_settings() -> Settings:
     """
     try:
         env_file = _get_env_file()
-        print(f" Cargando configuración desde: {env_file}")
+        logger.info(f"Cargando configuración desde: {env_file}")
         return Settings()
     except ValidationError as e:
         print("ERROR DE CONFIGURACIÓN - StoneFixer no puede iniciar")
