@@ -46,7 +46,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user), 
         }
         
     except Exception as e:
-        logger.error(f"[ERROR] Error en get_current_user_info: {e}")
+        logger.error(f" Error en get_current_user_info: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -71,7 +71,7 @@ async def get_current_user_roles(
         return user_roles
         
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo roles: {e}")
+        logger.error(f" Error obteniendo roles: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener los roles del usuario"
@@ -94,7 +94,7 @@ async def get_current_user_permissions(
         return permissions_info
         
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo permisos: {e}")
+        logger.error(f" Error obteniendo permisos: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener los permisos del usuario"
@@ -141,11 +141,11 @@ async def list_users(
             }
             users_response.append(user_data)
         
-        logger.error(f"[INFO] Admin {current_user.email} listó {len(users_response)} usuarios")
+        logger.info(f" Admin {current_user.email} listó {len(users_response)} usuarios")
         return users_response
     
     except Exception as e:
-        logger.error(f"[ERROR] Error en list_users: {e}")
+        logger.error(f" Error en list_users: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -191,7 +191,7 @@ async def get_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo usuario {user_id}: {e}")
+        logger.error(f" Error obteniendo usuario {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener información del usuario"
@@ -233,7 +233,7 @@ async def add_role(
                 detail=f"No se pudo añadir el rol '{role}'. Verifica que sea un rol válido."
             )
         
-        logger.error(f"[INFO] Admin {current_user.email} añadió rol '{role}' al usuario {user_id}")
+        logger.info(f" Admin {current_user.email} añadió rol '{role}' al usuario {user_id}")
         
         return {
             "message": f"Rol '{role}' añadido correctamente al usuario con ID {user_id}",
@@ -244,7 +244,7 @@ async def add_role(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[ERROR] Error añadiendo rol: {e}")
+        logger.error(f" Error añadiendo rol: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -306,7 +306,7 @@ async def remove_role(
                 detail=f"No se pudo eliminar el rol '{role}' del usuario con ID {user_id}"
             )
         
-        logger.error(f"[INFO] Admin {current_user.email} eliminó rol '{role}' del usuario {user_id}")
+        logger.info(f" Admin {current_user.email} eliminó rol '{role}' del usuario {user_id}")
         
         return {
             "message": f"Rol '{role}' eliminado correctamente del usuario con ID {user_id}",
@@ -317,7 +317,7 @@ async def remove_role(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[ERROR] Error eliminando rol: {e}")
+        logger.error(f" Error eliminando rol: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -352,7 +352,7 @@ async def get_user_roles_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo roles del usuario {user_id}: {e}")
+        logger.error(f" Error obteniendo roles del usuario {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener los roles del usuario"
@@ -401,7 +401,7 @@ async def get_roles_statistics(
         }
         
     except Exception as e:
-        logger.error(f"[ERROR] Error obteniendo estadísticas de roles: {e}")
+        logger.error(f" Error obteniendo estadísticas de roles: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(

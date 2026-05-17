@@ -1,8 +1,9 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session
-from typing import List
+from typing import List, Optional
 from functools import wraps
 
 from app.config import settings
@@ -10,11 +11,15 @@ from app.db.database import get_db
 from app.models.user import User
 from app.services.auth import get_user_by_email, get_user_roles
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(default=None),
 ) -> User:
     """
     Obtener el usuario actual a partir del token JWT.
@@ -38,20 +43,22 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    if not access_token:
+        raise credentials_exception
+
     try:
         # Decodificar token
         payload = jwt.decode(
-            token, 
+            access_token, 
             settings.SECRET_KEY, 
             algorithms=[settings.ALGORITHM]
         )
         email: str = payload.get("sub")
-        
         if email is None:
             raise credentials_exception
         
-    except JWTError as e:
-        print(f"Error decodificando token: {e}")
+    except InvalidTokenError:
+        logger.warning("Token JWT inválido o expirado recibido")
         raise credentials_exception
     
     # Buscar usuario en la base de datos
@@ -255,14 +262,6 @@ def check_permission(user: User, db: Session, required_permission: str) -> bool:
     
     return required_permission in permissions["permissions"]
 
-# Función para obtener los roles del token actual
-# async def get_token_roles(token: str = Depends(oauth2_scheme)) -> list:
-#     """Extraer roles del token JWT sin verificar usuario"""
-#     try:
-#         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-#         return payload.get("roles", [])
-#     except JWTError:
-#         return []
 
 # ============================================================================
 # DECORADOR LEGACY (Para compatibilidad con código antiguo)
@@ -285,8 +284,8 @@ def require_roles(allowed_roles: List[str]):
         ):
             pass
     """
-    print(f"WARNING: @require_roles está deprecado. Usa RoleChecker en su lugar.")
-    print(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
+    logger.warning("@require_roles está deprecado. Usar RoleChecker en su lugar.")
+    logger.warning(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
     
     def decorator(func):
         @wraps(func)
