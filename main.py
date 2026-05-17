@@ -1,13 +1,19 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
+from sqlmodel import Session, select
+from starlette.middleware.base import RequestResponseEndpoint
+
 import logging
 import secrets
+import time
+import base64
 
 from app.core.exceptions import register_exception_handlers
-from app.db.database import create_db_and_tables
+from app.db.database import create_db_and_tables, engine
 from app.config import settings
 
 # Configurar logging para mejor debugging
@@ -28,7 +34,7 @@ from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetM
 # Crear tablas
 create_db_and_tables()
 
-# ── Resolver referencias circulares de Pydantic v2 ───────────────────────────
+# ── Resolver referencias circulares de Pydantic v2 
 # TechAssetWithAssignment referencia a AssetAssignmentRead con una forward
 # reference (string "AssetAssignmentRead") para evitar importaciones circulares
 # entre tech_asset.py y asset_assignment.py.
@@ -69,25 +75,11 @@ app = FastAPI(
 # Handlers de error centralizado
 register_exception_handlers(app)
 
-# Configurar CORS
-
-allowed_origins = settings.get_allowed_origins()
-logger.info(f"CORS permitido para: {allowed_origins}")
-
-# Middlewares
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
-    expose_headers=["X-Process-Time"],
-)
 
 @app.middleware("http")
-async def log_requests(request, call_next):
-    import time
-    
+async def log_requests(request: Request, call_next: RequestResponseEndpoint):
+    """Registra duración y status de cada request. Advierte sobre lentos o errores."""
+
     start_time = time.time()
 
     # Log de request
@@ -120,7 +112,8 @@ async def log_requests(request, call_next):
 
 # Middleware de Security Headers 
 @app.middleware("http")
-async def security_headers_middleware(request: Request, call_next):
+async def security_headers_middleware(request: Request, call_next: RequestResponseEndpoint):
+    """Inyecta security headers en todas las respuestas."""
     response = await call_next(request)
     
     # Previene que el browser interprete archivos con MIME type incorrecto
@@ -145,6 +138,21 @@ async def security_headers_middleware(request: Request, call_next):
     
     return response
 
+# Configurar CORS
+
+allowed_origins = settings.get_allowed_origins()
+logger.info(f"CORS permitido para: {allowed_origins}")
+
+# Middlewares
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    expose_headers=["X-Process-Time", "Content-Disposition"],
+)
+
 # REGISTRAR ROUTERS
 app.include_router(auth_router, prefix="/api/v1/auth" ,tags=["Autenticacion"])
 app.include_router(users_router, prefix="/api/v1/users", tags=["Usuarios"])
@@ -158,85 +166,54 @@ app.include_router(assignment_documents_router, prefix="/api/v1/assignments", ta
 app.include_router(overtime_router, prefix="/api/v1/overtime", tags=["Horas Extras"])
 
 
+
 # Swagger protegido con Basic Auth
-@app.get("/docs", include_in_schema=False)
-async def swagger_ui(request: Request):
-    # Verificar Basic Auth manualmente
-    import base64
-    auth_header = request.headers.get("Authorization")
-    
-    if not auth_header or not auth_header.startswith("Basic "):
-        return Response(
-            content="Autenticación requerida",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
-        )
-    
+def _verify_swagger_auth(request: Request) -> bool:
+    """
+    Verifica las credenciales Basic Auth para los endpoints de documentación.
+    Usa secrets.compare_digest para prevenir timing attacks.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Basic "):
+        return False
     try:
         decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
         username, password = decoded.split(":", 1)
-        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
-        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
-        if not (correct_user and correct_pass):
-            return Response(
-                content="Credenciales incorrectas",
-                status_code=401,
-                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
-            )
-    except Exception:
-        return Response(
-            content="Error de autenticación",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
+        return (
+            secrets.compare_digest(username, settings.SWAGGER_USERNAME)
+            and secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
         )
-    
+    except Exception:
+        return False
+ 
+ 
+def _unauthorized_response() -> Response:
+    return Response(
+        content="Autenticación requerida",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'},
+    )
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui(request: Request):
+    if not _verify_swagger_auth(request):
+        return _unauthorized_response()
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
-        title=f"{settings.APP_NAME} — API Docs"
+        title=f"{settings.APP_NAME} — API Docs",
     )
 
 
 @app.get("/openapi.json", include_in_schema=False)
 async def openapi_schema(request: Request):
-    import base64
-    auth_header = request.headers.get("Authorization")
-    
-    if not auth_header or not auth_header.startswith("Basic "):
-        return Response(
-            content="Autenticación requerida",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
-        )
-    
-    try:
-        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = decoded.split(":", 1)
-        correct_user = secrets.compare_digest(username, settings.SWAGGER_USERNAME)
-        correct_pass = secrets.compare_digest(password, settings.SWAGGER_PASSWORD)
-        if not (correct_user and correct_pass):
-            return Response(
-                content="Credenciales incorrectas",
-                status_code=401,
-                headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
-            )
-    except Exception:
-        return Response(
-            content="Error de autenticación",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="StoneFixer API Docs"'}
-        )
-    
-    # Rebuild modelos con referencias circulares antes de generar el schema
-    from app.models.tech_asset import TechAssetWithAssignment
-    TechAssetWithAssignment.model_rebuild()
-    
-    from fastapi.encoders import jsonable_encoder
-    from fastapi.responses import JSONResponse
+    if not _verify_swagger_auth(request):
+        return _unauthorized_response()
+ 
     schema = get_openapi(
         title=settings.APP_NAME,
         version="1.0.0",
         description="StoneFixer API — Documentación interna",
-        routes=app.routes
+        routes=app.routes,
     )
     return JSONResponse(content=jsonable_encoder(schema))
 
@@ -245,11 +222,25 @@ async def openapi_schema(request: Request):
 # Health check
 @app.get("/health", tags=["Sistema"])
 def health_check():
-    """Endpoint de salud para monitoreo y load balancers"""
+    """
+    Health check para monitoreo y load balancers.
+    Verifica tanto que la app esté corriendo como que la DB sea accesible.
+    """
+    try:
+        with Session(engine) as session:
+            session.exec(select(1))
+        db_status = "ok"
+    except Exception as e:
+        logger.error(f"Health check — fallo de DB: {e}")
+        db_status = "error"
+ 
+    overall = "ok" if db_status == "ok" else "degraded"
+ 
     return {
-        "status": "ok",
+        "status": overall,
         "app": settings.APP_NAME,
         "environment": settings.ENVIRONMENT,
+        "database": db_status,
     }
 
 
