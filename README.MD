@@ -14,7 +14,7 @@
 | Base de datos principal | PostgreSQL (Aiven) |
 | Base de datos KPI | PostgreSQL (Aiven — solo lectura) |
 | Migraciones | Alembic |
-| Autenticación | JWT (python-jose) |
+| Autenticación | JWT (PyJWT) |
 | Seguridad | bcrypt, Fernet (cifrado DNI) |
 | Rate limiting | slowapi |
 | Testing | pytest + pytest-cov + httpx |
