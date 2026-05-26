@@ -143,17 +143,39 @@ def create_shift_schedule(
     """
     Crear un nuevo turno (usuario se auto-asigna)
     """
-    # Validaciones
+
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
+
+    # Determinar a quién se le asigna el turno
+    if shift_data.target_user_id and shift_data.target_user_id != current_user.id:
+        if not is_supervisor:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores pueden asignar turnos a otros usuarios"
+            )
+        # Verificar que el usuario destino existe
+        target_user = db.get(User, shift_data.target_user_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Usuario destino no encontrado")
+        assigned_user_id = shift_data.target_user_id
+    else:
+        assigned_user_id = current_user.id
+
+
+    # Validaciones usando el usuario destino, no el current_user
     ShiftScheduleService.validate_date(shift_data.date)
     
     ShiftScheduleService.validate_early_shift_capacity(db, shift_data.date, shift_data.shift_type)
     
-    ShiftScheduleService.validate_duplicate_assignment(db, current_user.id, shift_data.date)
+    ShiftScheduleService.validate_duplicate_assignment(db, assigned_user_id, shift_data.date)
     
     # Crear turno
+    shift_dict = shift_data.model_dump(exclude={"target_user_id"})
     new_shift = ShiftSchedule(
-        **shift_data.model_dump(),
-        user_id=current_user.id,
+        **shift_dict,
+        user_id=assigned_user_id,
+        modified_by_user_id=current_user.id if assigned_user_id != current_user.id else None,
     )
     
     db.add(new_shift)
