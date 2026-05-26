@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     # Swagger
     SWAGGER_USERNAME: str = "admin"
-    SWAGGER_PASSWORD: str = "changeme"  
+    SWAGGER_PASSWORD: str
 
     @field_validator("SECRET_KEY")
     @classmethod
