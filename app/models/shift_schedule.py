@@ -69,7 +69,8 @@ class ShiftScheduleCreate(SQLModel):
     department: str = "stock"
     date: date_type
     shift_type: ShiftType
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+    target_user_id: Optional[int] = Field(default=None, description="ID del usuario a asignar (solo admin/manager)")
 
 
 class ShiftScheduleUpdate(SQLModel):
