@@ -63,6 +63,8 @@ from app.api.routes.business_indicators_routes import router as business_indicat
 from app.api.routes.shift_schedule_routes import router as shift_schedule_router
 from app.api.routes.overtime_routes import router as overtime_router
 from app.api.routes.dashboard_routes import router as dashboard_router
+from app.api.routes.inventario_stock_routes import router as inventario_stock_router
+from app.api.routes.finnegans_config_routes import router as finnegans_config_router
 
 # Instancia de la app
 app = FastAPI(
@@ -164,6 +166,9 @@ app.include_router(shift_schedule_router, prefix="/api/v1/shift-schedules", tags
 app.include_router(business_indicators_router, prefix="/api/v1/business-indicators", tags=["Business Indicators"])
 app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
 app.include_router(overtime_router, prefix="/api/v1/overtime", tags=["Horas Extras"])
+app.include_router(inventario_stock_router, prefix="/api/v1/inventario-stock", tags=["Inventario de Stock"])
+app.include_router(finnegans_config_router, prefix="/api/v1/finnegans-config", tags=["Finnegans Config"])
+
 
 
 

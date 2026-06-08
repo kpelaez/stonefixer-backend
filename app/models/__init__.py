@@ -52,6 +52,20 @@ from .shift_schedule import (
 
 from .overtime import OvertimeEntry
 
+from .inventario_stock import (
+    InventarioRelevamiento,
+    InventarioRelevamientoSerie,
+    InventarioRelevamientoDiferencia,
+    InventarioRelevamientoAjuste,
+    EstadoRelevamiento,
+    EstadoSerie,
+    ResultadoFisico,
+    TipoDiferencia,
+    EstadoAjuste,
+)
+
+from .finnegans_config import FinnegansConfig
+
 __all__ = [
     # User
     "User", "UserBase", "UserCreate", "UserRead", "UserLogin", "UserDNIUpdate",
@@ -76,4 +90,17 @@ __all__ = [
     "ShiftType", "ShiftStatus",
     # Overtime
     "OvertimeEntry",
+    # InventarioStock
+    "InventarioRelevamiento",
+    "InventarioRelevamientoSerie",
+    "InventarioRelevamientoDiferencia",
+    "InventarioRelevamientoAjuste",
+    "EstadoRelevamiento",
+    "EstadoSerie",
+    "ResultadoFisico",
+    "TipoDiferencia",
+    "EstadoAjuste",
+    # Finnegans
+    "FinnegansConfig",
+    
 ]

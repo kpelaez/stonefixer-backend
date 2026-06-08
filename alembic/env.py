@@ -4,9 +4,23 @@ from sqlalchemy import pool
 from alembic import context
 import sys
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Agregar el directorio raíz al path para importar tus modelos
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# --- Cargar variables de entorno ANTES de cualquier import de la app ---
+# Alembic corre fuera del contexto de FastAPI, así que Pydantic Settings
+# no carga el .env automáticamente. Necesitamos hacerlo manualmente.
+# Busca en orden: .env.development → .env
+_base_dir = Path(__file__).resolve().parent.parent
+_env = os.getenv("ENVIRONMENT", "development")
+_env_file = _base_dir / f".env.{_env}"
+if _env_file.exists():
+    load_dotenv(_env_file)
+else:
+    load_dotenv(_base_dir / ".env")
+
+# Agregar el directorio raíz al path para importar los modelos
+sys.path.append(str(_base_dir))
 
 # Importar tus modelos - AJUSTA SEGÚN TU ESTRUCTURA
 # Si tus modelos están en models.py:
@@ -16,6 +30,7 @@ from app.models.asset_maintenance import AssetMaintenance
 from app.models.role import Role
 from app.models.user import User
 from app.models.overtime import OvertimeEntry
+from app.models.inventario_stock import InventarioRelevamiento, InventarioRelevamientoSerie, InventarioRelevamientoDiferencia, InventarioRelevamientoAjuste
 
 from sqlmodel import SQLModel
 
