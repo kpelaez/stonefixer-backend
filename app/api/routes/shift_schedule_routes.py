@@ -304,6 +304,13 @@ def get_shift_statistics(
     """
     Obtener estadísticas de turnos por usuario en un período
     """
+
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(r in ["admin", "manager"] for r in user_roles)
+
+    # Usuarios solo ven sus propias estadísticas
+    filter_user_id = None if is_supervisor else current_user.id
+
     # Query para contar turnos por usuario y tipo
     stats_query = (
         select(
@@ -326,6 +333,10 @@ def get_shift_statistics(
         )
         .group_by(ShiftSchedule.user_id, User.full_name)
     )
+
+    if filter_user_id is not None:
+        stats_query = stats_query.where(ShiftSchedule.user_id == filter_user_id)
+
     
     results = db.exec(stats_query).all()
     
@@ -351,10 +362,22 @@ def get_shift_statistics(
 def get_shift_alerts(
     department: str = Query("stock", description="Departamento"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user) 
 ):
     """
-    Obtener alertas de turnos sin asignar
+    Obtener alertas de turnos sin asignar.
+    Solo admins/managers ven alertas reales; usuarios ven lista vacía.
     """
-    alerts = ShiftScheduleService.check_unassigned_alerts(db, department)
-    return {"alerts": alerts, "count": len(alerts)}
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(r in ["admin", "manager"] for r in user_roles)
+
+    # Usuarios regulares no necesitan ver alertas de cobertura del equipo
+    if not is_supervisor:
+        return {"alerts": [], "count": 0}
+
+    try:
+        alerts = ShiftScheduleService.check_unassigned_alerts(db, department)
+        return {"alerts": alerts, "count": len(alerts)}
+    except Exception as e:
+        logger.error(f"Error al calcular alertas: {e}")
+        return {"alerts": [], "count": 0}  # Nunca romper el calendario por esto
