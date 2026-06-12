@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.finneg.com/api"
 _SEMAPHORE_LIMIT = 5
 _TIMEOUT_SECONDS = 45.0
-_MONEDA_DEFAULT = "ARS"
+_MONEDA_DEFAULT = "PES"
 _FECHA_STOCK = "getCurrentDate"
 
 # Fecha nula de Finnegans — se trata como "sin vencimiento"

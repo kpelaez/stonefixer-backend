@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     SWAGGER_USERNAME: str = "admin"
     SWAGGER_PASSWORD: str
 
+    # Inventario de Stock — Omnimedica
+    OMNI_USER: str = ""
+    OMNI_PASSWORD: str = ""
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

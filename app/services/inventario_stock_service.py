@@ -18,10 +18,13 @@ Convenciones del proyecto:
     los routers transforman las excepciones del dominio).
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
+import sys
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlmodel import Session, select
 
@@ -43,6 +46,7 @@ from app.schemas.inventario_stock import (
     RelevamientoCreate,
 )
 from app.services.finnegans_client import FinnegansClient
+from app.services.finnegans_credential_service import FinnegansCredentialService
 from app.services.omnimedica_scraper import OmnimedicaScraper
 
 logger = logging.getLogger(__name__)
@@ -50,6 +54,32 @@ logger = logging.getLogger(__name__)
 # Umbral de días para alertar vencimientos próximos
 _DIAS_UMBRAL_VENCIMIENTO = 90
 
+# Código de empresa en Finnegans para todas las consultas de este módulo
+_EMPRESA_FINNEGANS = "OMNI34"
+
+# Mapeo de nombres de depósito: Omnimedica (texto libre) → código Finnegans
+# Validado contra datos reales del scraper y de la API.
+MAPEO_DEPOSITOS_OMNI_A_FINNEGANS: dict[str, str] = {
+    "OMNIMEDICA CENTRAL": "GENERAL",
+    "DEPOSITO DE DISTRIBUCION": "DISTRIBUCION",
+}
+
+def _ejecutar_scraper_en_thread(proveedor: str):
+    """
+    Corre OmnimedicaScraper en un thread con su propio event loop Proactor.
+
+    Necesario en Windows: uvicorn --reload usa SelectorEventLoop, que no
+    soporta subprocesos. Playwright SÍ necesita subprocesos (lanza Chromium).
+    Esto aísla Playwright en su propio loop sin afectar el loop de FastAPI.
+    """
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+    async def _run():
+        async with OmnimedicaScraper() as scraper:
+            return await scraper.extraer_stock(proveedor)
+
+    return asyncio.run(_run())
 
 class InventarioStockService:
     """
@@ -81,7 +111,7 @@ class InventarioStockService:
         ).first()
 
         if existente:
-            raise ValidationError(
+            raise InvalidOperationError(
                 f"Ya existe un relevamiento activo para '{payload.proveedor}' "
                 f"en {payload.mes_ciclo} (id={existente.id})"
             )
@@ -148,10 +178,12 @@ class InventarioStockService:
         db.commit()
 
         try:
-            # --- OMNIMEDICA ---
-            async with OmnimedicaScraper() as scraper:
-                resultado = await scraper.extraer_stock(rel.proveedor)
-
+            # --- OMNIMEDICA (en thread separado, ver _ejecutar_scraper_en_thread) ---
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                resultado = await loop.run_in_executor(
+                    pool, _ejecutar_scraper_en_thread, rel.proveedor
+                )
             if not resultado.exitoso:
                 raise RuntimeError(
                     f"Scraping Omnimedica falló: {resultado.error}"
@@ -163,14 +195,26 @@ class InventarioStockService:
                 f"{len(series_omni)} series extraídas de Omnimedica"
             )
 
-            # --- FINNEGANS (en paralelo con semáforo) ---
-            codigos_unicos = list({s.codigo for s in series_omni})
-            async with FinnegansClient() as finn:
-                finn_map = await finn.consultar_codigos(codigos_unicos)
+            # --- FINNEGANS: token + consulta multi-depósito en paralelo ---
+            token = await FinnegansCredentialService.get_valid_token(db)
+            async with FinnegansClient(token) as finn:
+                stock_por_deposito = await finn.get_stock_empresa_todos_depositos(
+                    empresa=_EMPRESA_FINNEGANS
+                )
 
+            # Indexar por (codigo_producto, deposito_finnegans) -> stock_disponible
+            # Esto permite comparar Omni vs Finnegans DEPÓSITO POR DEPÓSITO,
+            # no como total agregado (decisión de diseño confirmada).
+            finn_index: dict[tuple[str, str], Decimal] = {}
+            for deposito_finn, items in stock_por_deposito.items():
+                for item in items:
+                    finn_index[(item.producto_codigo, deposito_finn)] = item.stock_disponible
+
+            total_finn_items = sum(len(v) for v in stock_por_deposito.values())
             logger.info(
                 f"[InventarioStock] #{relevamiento_id}: "
-                f"{len(finn_map)} códigos consultados en Finnegans"
+                f"{total_finn_items} items recibidos de Finnegans "
+                f"({len(stock_por_deposito)} depósitos)"
             )
 
             # --- PERSISTENCIA ---
@@ -184,8 +228,27 @@ class InventarioStockService:
                 db.delete(s)
             db.flush()
 
+            series_con_match_finn = 0
+
             for s in series_omni:
-                cant_finn = finn_map.get(s.codigo)
+                # Mapear el nombre de depósito de Omnimedica al código de Finnegans
+                deposito_finn = MAPEO_DEPOSITOS_OMNI_A_FINNEGANS.get(
+                    s.deposito.strip().upper()
+                )
+
+                cant_finn: Optional[Decimal] = None
+                if deposito_finn:
+                    cant_finn = finn_index.get((s.codigo, deposito_finn))
+
+                if cant_finn is not None:
+                    series_con_match_finn += 1
+                else:
+                    logger.debug(
+                        f"[InventarioStock] Sin match Finnegans: "
+                        f"codigo={s.codigo} deposito_omni='{s.deposito}' "
+                        f"deposito_finn={deposito_finn}"
+                    )
+
                 db.add(
                     InventarioRelevamientoSerie(
                         relevamiento_id=relevamiento_id,
@@ -198,23 +261,20 @@ class InventarioStockService:
                         deposito=s.deposito,
                         estado_sistema=s.estado_sistema,
                         en_transito=s.en_transito,
-                        cant_finnegans=(
-                            Decimal(str(cant_finn)) if cant_finn is not None else None
-                        ),
+                        cant_finnegans=cant_finn,
                     )
                 )
 
             rel.total_series_omni = len(series_omni)
-            rel.total_codigos_finn = len(
-                [v for v in finn_map.values() if v is not None]
-            )
+            rel.total_codigos_finn = series_con_match_finn
             rel.estado = EstadoRelevamiento.LISTO
             rel.scraping_finalizado_en = datetime.now(timezone.utc)
             rel.actualizado_en = datetime.now(timezone.utc)
             db.commit()
 
             logger.info(
-                f"[InventarioStock] #{relevamiento_id}: scraping completado OK"
+                f"[InventarioStock] #{relevamiento_id}: scraping completado OK "
+                f"({series_con_match_finn}/{len(series_omni)} series con match en Finnegans)"
             )
 
         except Exception as exc:
