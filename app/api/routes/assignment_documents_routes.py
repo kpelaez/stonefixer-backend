@@ -1,273 +1,362 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from datetime import datetime, timezone
+ 
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import StreamingResponse
-import httpx
 from sqlmodel import Session
-from typing import Optional
-
-from app.db.database import get_db
-from app.config import settings
+ 
 from app.api.deps import require_admin
-from app.models.user import User
+from app.config import settings
+from app.core.dni_security import dni_manager
+from app.core.exceptions import (
+    BusinessRuleViolationError,
+    ExternalServiceError,
+    InvalidOperationError,
+    ResourceNotFoundError,
+)
+from app.db.database import get_db
 from app.models.asset_assignment import AssetAssignment
+from app.models.user import User
+from app.services.asset_assignment_service import get_assignment
 from app.services.assignment_document_service import AssignmentDocumentGenerator
 from app.services.humand_integration_service import humand_service
-from app.services.asset_assignment_service import get_assignment
 from app.services.tech_asset_service import get_tech_asset
-from app.core.dni_security import dni_manager
-from datetime import datetime, timezone
-import logging
-
+ 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
+ 
+ 
+# Helpers internos 
+ 
+def _build_employee_data(user: User, assignment: AssetAssignment, dni: str) -> dict:
+    return {
+        "full_name": user.full_name,
+        "dni": dni,
+        "email": user.email,
+        "department": getattr(user, "department", None) or assignment.location_of_use or "N/A",
+    }
+ 
+ 
+def _build_asset_data(asset) -> dict:
+    return {
+        "name": asset.name,
+        "category": asset.category.value if hasattr(asset.category, "value") else asset.category,
+        "brand": asset.brand,
+        "model": asset.model,
+        "serial_number": asset.serial_number,
+        "asset_tag": asset.asset_tag or "N/A",
+    }
+ 
+ 
+def _build_assignment_data(assignment: AssetAssignment) -> dict:
+    return {
+        "id": assignment.id,
+        "assigned_date": assignment.assigned_date,
+        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado",
+        "accessories": assignment.accessories or "Ninguno",
+    }
+ 
+ 
+def _resolve_user_and_dni(db: Session, assignment: AssetAssignment) -> tuple[User, str]:
+    """
+    Obtiene el usuario y desencripta su DNI.
+    Usa excepciones centralizadas de StoneFixer.
+    """
+    user = db.get(User, assignment.assigned_to_user_id)
+ 
+    if not user:
+        raise ResourceNotFoundError(
+            resource_type="Usuario",
+            resource_id=assignment.assigned_to_user_id,
+        )
+ 
+    if not user.dni_encrypted:
+        raise BusinessRuleViolationError(
+            rule="DNI requerido para documentos",
+            reason=(
+                f"El usuario '{user.full_name}' no tiene DNI registrado. "
+                "Es necesario para generar el Acta de Entrega."
+            ),
+        )
+ 
+    try:
+        dni = dni_manager.decrypt_dni(user.dni_encrypted)
+    except Exception as exc:
+        logger.error(
+            f"Error desencriptando DNI para usuario {assignment.assigned_to_user_id}: {exc}"
+        )
+        raise ExternalServiceError(
+            service_name="DNI Encryption",
+            reason="No se pudo procesar el DNI del usuario. Contactá al administrador.",
+        )
+ 
+    return user, dni
+ 
+ 
+# Tarea de background 
+ 
+async def _send_to_humand_background(
+    assignment_id: int,
+    employee_dni: str,
+    employee_name: str,
+    send_notification: bool,
+    employee_data: dict,
+    asset_data: dict,
+    assignment_data: dict,
+) -> None:
+    """
+    Genera el PDF y lo envía a Humand de forma asíncrona.
+    Actualiza el estado en la DB según el resultado.
+ 
+    Crea su propia sesión de DB porque corre fuera del request/response cycle.
+    """
+    from app.db.database import get_db as _get_db
+    from fastapi import HTTPException
+ 
+    db_gen = _get_db()
+    db = next(db_gen)
+ 
+    try:
+        assignment = db.get(AssetAssignment, assignment_id)
+        if not assignment:
+            logger.error(
+                f"[BG-Humand] Asignación #{assignment_id} no encontrada en background task"
+            )
+            return
+ 
+        # Registrar timestamp del intento
+        assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+        db.add(assignment)
+        db.commit()
+ 
+        # Generar PDF
+        logger.info(f"[BG-Humand] Generando PDF — asignación #{assignment_id}")
+        doc_generator = AssignmentDocumentGenerator()
+        pdf_buffer = doc_generator.generate_assignment_pdf(
+            assignment_data=assignment_data,
+            employee_data=employee_data,
+            asset_data=asset_data,
+        )
+ 
+        # Enviar a Humand
+        logger.info(f"[BG-Humand] Enviando a Humand — asignación #{assignment_id}")
+        humand_response = await humand_service.upload_assignment_document(
+            employee_dni=employee_dni,
+            pdf_buffer=pdf_buffer,
+            assignment_id=assignment_id,
+            send_notification=send_notification,
+        )
+ 
+        # Éxito — actualizar estado
+        now = datetime.now(timezone.utc)
+        assignment.document_sent_to_humand = True
+        assignment.humand_send_status = "SENT"
+        assignment.document_sent_at = now
+        assignment.humand_last_attempt_at = now
+        assignment.humand_document_name = humand_response.get(
+            "name",
+            f"Acta_Entrega_Activo_{assignment_id}.pdf",
+        )
+        assignment.humand_folder_id = settings.HUMAND_FOLDER_ID
+        assignment.humand_error_detail = None
+ 
+        db.add(assignment)
+        db.commit()
+        logger.info(f"[BG-Humand] ✓ Enviado y registrado — asignación #{assignment_id}")
+ 
+    except HTTPException as exc:
+        # Las HTTPException que lanza humand_service (timeout, 404, 401, etc.)
+        error_detail = exc.detail
+        logger.error(
+            f"[BG-Humand] Error en envío asignación #{assignment_id}: {error_detail}"
+        )
+        assignment = db.get(AssetAssignment, assignment_id)
+        if assignment:
+            assignment.humand_send_status = "FAILED"
+            assignment.humand_error_detail = str(error_detail)[:500]
+            assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+            db.add(assignment)
+            db.commit()
+ 
+    except Exception as exc:
+        logger.exception(
+            f"[BG-Humand] Error inesperado asignación #{assignment_id}: {exc}"
+        )
+        assignment = db.get(AssetAssignment, assignment_id)
+        if assignment:
+            assignment.humand_send_status = "FAILED"
+            assignment.humand_error_detail = f"Error inesperado: {str(exc)[:400]}"
+            assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+            db.add(assignment)
+            db.commit()
+ 
+    finally:
+        try:
+            db_gen.close()
+        except Exception:
+            pass
+ 
+ 
+# Endpoints
+ 
 @router.post("/{assignment_id}/generate-preview")
 async def generate_assignment_document_preview(
     assignment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_admin),
 ):
     """
-    Genera preview del PDF de asignación (NO lo envía a Humand)
-    
-    Flujo:
-    1. Obtiene datos de la asignación
-    2. Obtiene datos del empleado (con DNI encriptado)
-    3. Genera el PDF
-    4. Retorna el PDF para preview
-    
-    Permisos: Solo administradores
+    Genera y retorna el PDF de asignación para preview.
+    NO envía a Humand ni modifica el estado de la asignación.
     """
-    # 1. Obtener asignación
     assignment = get_assignment(db, assignment_id)
     if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asignación no encontrada"
-        )
-    
-    # 2. Obtener usuario asignado
-    user = db.get(User, assignment.assigned_to_user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario asignado no encontrado"
-        )
-    
-    # Verificar que tenga DNI
-    if not user.dni_encrypted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El usuario no tiene DNI registrado. Es necesario para generar el documento."
-        )
-    
-    # 3. Desencriptar DNI solo para este uso
-    try:
-        dni = dni_manager.decrypt_dni(user.dni_encrypted)
-    except Exception as e:
-        logger.error(f"Error desencriptando DNI: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al procesar datos del usuario"
-        )
-    
-    # 4. Obtener datos del activo
+        raise ResourceNotFoundError(resource_type="Asignación", resource_id=assignment_id)
+ 
+    user, dni = _resolve_user_and_dni(db, assignment)
+ 
     asset = get_tech_asset(db, assignment.tech_asset_id)
     if not asset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activo no encontrado"
-        )
-    
-    # 5. Preparar datos para el PDF
-    employee_data = {
-        "full_name": user.full_name,
-        "dni": dni,
-        "email": user.email,
-        "department": getattr(user, 'department', None) or assignment.location_of_use or 'N/A'
-    }
-    
-    asset_data = {
-        "name": asset.name,
-        "category": asset.category.value if hasattr(asset.category, 'value') else asset.category,
-        "brand": asset.brand,
-        "model": asset.model,
-        "serial_number": asset.serial_number,
-        "asset_tag": asset.asset_tag or "N/A"
-    }
-    
-    assignment_data = {
-        "id": assignment.id,
-        "assigned_date": assignment.assigned_date,
-        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado",
-        "accessories": assignment.accessories or "Ninguno"
-    }
-    
-    # 6. Generar PDF
+        raise ResourceNotFoundError(resource_type="Activo tecnológico", resource_id=assignment.tech_asset_id)
+ 
     doc_generator = AssignmentDocumentGenerator()
     pdf_buffer = doc_generator.generate_assignment_pdf(
-        assignment_data=assignment_data,
-        employee_data=employee_data,
-        asset_data=asset_data
+        assignment_data=_build_assignment_data(assignment),
+        employee_data=_build_employee_data(user, assignment, dni),
+        asset_data=_build_asset_data(asset),
     )
-    
-    # 7. Retornar PDF para preview
+ 
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"inline; filename=Asignacion_{assignment_id}_PREVIEW.pdf"
-        }
+        },
     )
-
-
-@router.post("/{assignment_id}/send-to-humand")
+ 
+ 
+@router.post("/{assignment_id}/send-to-humand", status_code=status.HTTP_202_ACCEPTED)
 async def send_assignment_document_to_humand(
     assignment_id: int,
+    background_tasks: BackgroundTasks,
     send_notification: bool = True,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_admin),
 ):
     """
-    Genera el PDF y lo envía a Humand
-    
+    Genera el PDF y lo envía a Humand en background.
+ 
     Flujo:
-    1. Genera el PDF (igual que preview)
-    2. Envía el PDF a Humand API
-    3. Actualiza el estado de la asignación
-    
+    1. Valida asignación, usuario y activo
+    2. Marca la asignación como PENDING
+    3. Encola el envío en background (evita timeout de Cloudflare)
+    4. Responde 202 Accepted inmediatamente
+ 
+    El frontend debe consultar GET /{assignment_id}/document-status
+    para conocer el resultado: PENDING → SENT | FAILED
+ 
     Permisos: Solo administradores
     """
     assignment = get_assignment(db, assignment_id)
     if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asignación no encontrada"
-        )
-    
+        raise ResourceNotFoundError(resource_type="Asignación", resource_id=assignment_id)
+ 
+    # Ya fue enviado anteriormente
     if assignment.document_sent_to_humand:
-        raise HTTPException(
-            status_code=400,
-            detail=f"El documento ya fue enviado a Humand el {assignment.document_sent_at.strftime('%d/%m/%Y %H:%M')}"
+        sent_at = (
+            assignment.document_sent_at.strftime("%d/%m/%Y %H:%M")
+            if assignment.document_sent_at
+            else "fecha desconocida"
         )
-    
-    
-    user = db.get(User, assignment.assigned_to_user_id)
-    if not user or not user.dni_encrypted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuario sin DNI registrado"
+        raise InvalidOperationError(
+            operation="Envío a Humand",
+            reason=f"El documento ya fue enviado el {sent_at}. Esta acción no se puede repetir.",
         )
-    
-    try:
-        dni = dni_manager.decrypt_dni(user.dni_encrypted)
-    except Exception as e:
-        logger.error(f"Error desencriptando DNI: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al procesar datos del usuario"
+ 
+    # Hay un envío en curso
+    if assignment.humand_send_status == "PENDING":
+        raise BusinessRuleViolationError(
+            rule="Envío único simultáneo",
+            reason="Ya hay un envío en curso para esta asignación. Esperá unos segundos y verificá el estado.",
         )
-    
+ 
+    user, dni = _resolve_user_and_dni(db, assignment)
+ 
     asset = get_tech_asset(db, assignment.tech_asset_id)
     if not asset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activo no encontrado"
+        raise ResourceNotFoundError(
+            resource_type="Activo tecnológico",
+            resource_id=assignment.tech_asset_id,
         )
-    
-    # Preparar datos
-    employee_data = {
-        "full_name": user.full_name,
-        "dni": dni,
-        "email": user.email,
-        "department": getattr(user, 'department',  None) or assignment.location_of_use or 'N/A'
-    }
-    
-    asset_data = {
-        "name": asset.name,
-        "category": asset.category.value if hasattr(asset.category, 'value') else asset.category,
-        "brand": asset.brand,
-        "model": asset.model,
-        "serial_number": asset.serial_number,
-        "asset_tag": asset.asset_tag or "N/A"
-    }
-    
-    assignment_data = {
-        "id": assignment.id,
-        "assigned_date": assignment.assigned_date,
-        "condition_at_assignment": assignment.condition_at_assignment or "Buen estado",
-        "accessories": assignment.accessories or "Ninguno"
-    }
-    
-    # Generar PDF
-    doc_generator = AssignmentDocumentGenerator()
-    pdf_buffer = doc_generator.generate_assignment_pdf(
-        assignment_data=assignment_data,
-        employee_data=employee_data,
-        asset_data=asset_data
-    )
-    
-    # Enviar a Humand
-    try:
-        humand_response = await humand_service.upload_assignment_document(
-            employee_dni=dni,
-            pdf_buffer=pdf_buffer,
-            assignment_id=assignment_id,
-            send_notification=send_notification
-        )
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Error enviando a Humand: {e.response.text}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Error al enviar documento a Humand: {e.response.text}"
-        )
-    except Exception as e:
-        logger.error(f"Error inesperado: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al enviar documento"
-        )
-    
-    # Actualizar asignación
-    assignment.document_sent_to_humand = True
-    assignment.document_sent_at = datetime.now(timezone.utc)
-    assignment.humand_document_name = f"Asignacion_Activo_{assignment_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    assignment.humand_folder_id = settings.HUMAND_FOLDER_ID
-    
+ 
+    # Pre-calcular datos para el background task antes de cerrar la sesión
+    employee_data = _build_employee_data(user, assignment, dni)
+    asset_data = _build_asset_data(asset)
+    assignment_data = _build_assignment_data(assignment)
+ 
+    # Marcar PENDING antes de encolar (si el worker muere antes de empezar, queda rastreable)
+    assignment.humand_send_status = "PENDING"
+    assignment.humand_error_detail = None
     db.add(assignment)
     db.commit()
-    db.refresh(assignment)
-    
+ 
+    background_tasks.add_task(
+        _send_to_humand_background,
+        assignment_id=assignment_id,
+        employee_dni=dni,
+        employee_name=user.full_name,
+        send_notification=send_notification,
+        employee_data=employee_data,
+        asset_data=asset_data,
+        assignment_data=assignment_data,
+    )
+ 
+    logger.info(
+        f"[Humand] Envío encolado — asignación #{assignment_id} "
+        f"| empleado: {user.full_name} | notificación: {send_notification}"
+    )
+ 
     return {
-        "message": "Documento generado y enviado a Humand exitosamente",
+        "message": "El documento está siendo generado y enviado a Humand.",
         "assignment_id": assignment_id,
         "employee_name": user.full_name,
         "asset_name": asset.name,
-        "sent_at": assignment.document_sent_at.isoformat(),
-        "humand_response": humand_response
+        "status": "PENDING",
+        "detail": "Consultá el estado en unos segundos con GET /document-status",
     }
-
-
+ 
+ 
 @router.get("/{assignment_id}/document-status")
 async def get_assignment_document_status(
     assignment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_admin),
 ):
     """
-    Consulta el estado del documento de asignación
+    Retorna el estado actual del envío a Humand.
+ 
+    Valores posibles de send_status:
+    - null:     Nunca se intentó enviar
+    - PENDING:  Envío en curso
+    - SENT:     Confirmado por Humand
+    - FAILED:   Falló — ver error_detail para el motivo
     """
     assignment = db.get(AssetAssignment, assignment_id)
     if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asignación no encontrada"
-        )
-    
+        raise ResourceNotFoundError(resource_type="Asignación", resource_id=assignment_id)
+ 
     return {
         "assignment_id": assignment_id,
+        "send_status": assignment.humand_send_status,
         "document_sent": assignment.document_sent_to_humand,
         "sent_at": assignment.document_sent_at.isoformat() if assignment.document_sent_at else None,
+        "last_attempt_at": (
+            assignment.humand_last_attempt_at.isoformat()
+            if assignment.humand_last_attempt_at
+            else None
+        ),
         "document_name": assignment.humand_document_name,
-        "folder_id": assignment.humand_folder_id
+        "folder_id": assignment.humand_folder_id,
+        "error_detail": assignment.humand_error_detail,
     }
+ 

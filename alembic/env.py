@@ -5,6 +5,16 @@ from alembic import context
 import sys
 import os
 
+# ── Cargar .env antes de cualquier import de la app ─────────────────────────
+# Necesario en Windows donde las variables de entorno no se cargan automáticamente
+from dotenv import load_dotenv
+
+_env_file = f".env.{os.getenv('ENVIRONMENT', 'production')}"
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+elif os.path.exists(".env"):
+    load_dotenv(".env")
+
 # Agregar el directorio raíz al path para importar tus modelos
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
