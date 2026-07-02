@@ -42,17 +42,15 @@ def create_tech_asset_endpoint(
     Rate limit: 20 requests/minuto
     """
     try:
-        print(f"Received tech_asset data: {tech_asset}")  # Para debugging
+        logger.debug(f"Creando activo — payload recibido de {current_user.email}")
         result = create_tech_asset(db, tech_asset)
-        print(f"Created tech_asset: {result}")  # Para debugging
+        logger.info(f"Activo creado: {result.id} por {current_user.email}")
         return result
     except ValueError as e:
-        print(f"ValueError creating tech_asset: {e}")
+        logger.warning(f"Validación fallida al crear activo: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"Unexpected error creating tech_asset: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error inesperado creando activo")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
     
 @router.get("/", response_model=PaginatedResponse[TechAssetSummary])
@@ -170,31 +168,24 @@ async def update_tech_asset_endpoint(
     Rate limit: 50 requests/minuto
     """
     try:
-        print(f"[INFO] Usuario {current_user.email} actualizando activo ID: {asset_id}")
-        
+        logger.info(f"Usuario {current_user.email} actualizando activo ID: {asset_id}")
         tech_asset = update_tech_asset(db, asset_id, tech_asset_update)
-        
+
         if not tech_asset:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Activo con ID {asset_id} no encontrado"
             )
-        
-        print(f"[SUCCESS] Activo {asset_id} actualizado correctamente")
+
+        logger.info(f"Activo {asset_id} actualizado correctamente")
         return tech_asset
-        
+
     except HTTPException:
-        # Re-lanzar HTTPException sin modificar
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        print(f"[ERROR] Error inesperado: {e}")
-        import traceback
-        traceback.print_exc()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception(f"Error inesperado actualizando activo {asset_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al actualizar el activo"
@@ -216,23 +207,22 @@ async def delete_asset_endpoint(
     Rate limit: 20 requests/minuto
     """
     try:
-        print(f"[WARNING] Usuario {current_user.email} eliminando activo ID: {asset_id}")
-        
+        logger.warning(f"Usuario {current_user.email} eliminando activo ID: {asset_id}")
         success = delete_tech_asset(db, asset_id)
-        
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Activo con ID {asset_id} no encontrado"
             )
-        
-        print(f"[SUCCESS] Activo {asset_id} eliminado correctamente")
+
+        logger.info(f"Activo {asset_id} eliminado correctamente")
         return None
-        
+
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"[ERROR] Error eliminando activo: {e}")
+    except Exception:
+        logger.exception(f"Error eliminando activo {asset_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al eliminar el activo"
@@ -251,10 +241,9 @@ async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: Us
         )
     
     try:
-        history = get_asset_maintenance_history(db, asset_id)
-        return history
-    except Exception as e:
-        print(f"[ERROR] Error obteniendo historial: {e}")
+        return get_asset_maintenance_history(db, asset_id)
+    except Exception:
+        logger.exception(f"Error obteniendo historial de mantenimiento del activo {asset_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener el historial de mantenimiento"
@@ -265,39 +254,25 @@ async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: Us
 async def get_asset_categories(current_user: User = Depends(get_current_user)):
     """Obtener lista de categorías disponibles para activos tecnológicos"""
     try:
-        categories = [
-            {
-                "value": category.value,
-                "label": category.value.replace("_", " ").title()
-            }
+        return [
+            {"value": category.value, "label": category.value.replace("_", " ").title()}
             for category in AssetCategory
         ]
-        return categories
-    except Exception as e:
-        print(f"[ERROR] Error obteniendo categorías: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener las categorías"
-        )
+    except Exception:
+        logger.exception("Error obteniendo categorías")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al obtener las categorías")
 
 @router.get("/status/list")
 async def get_asset_statuses(current_user: User = Depends(get_current_user)):
     """Obtener lista de estados disponibles para activos tecnológicos"""
     try:
-        statuses = [
-            {
-                "value": status_item.value,
-                "label": status_item.value.replace("_", " ").title()
-            }
+        return [
+            {"value": status_item.value, "label": status_item.value.replace("_", " ").title()}
             for status_item in AssetStatus
         ]
-        return statuses
-    except Exception as e:
-        print(f"[ERROR] Error obteniendo estados: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al obtener los estados"
-        )
+    except Exception:
+        logger.exception("Error obteniendo estados")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al obtener los estados")
     
 @router.post("/generate-tag",response_model=dict)
 #@require_roles(["admin", "inventory_manager"])
@@ -308,17 +283,20 @@ async def generate_asset_tag_endpoint(
 ):
     """Generar una etiqueta de activo única"""
     try:
-        
         tag = generate_asset_tag(db, request.category)
         logger.info(
-            f"[TAG GENERADO] {tag} para categoría {request.category.value} "
-            f"por usuario {current_user.email}"
+            f"Tag generado: {tag} para categoría {request.category.value} por {current_user.email}"
         )
-        
-        return {
-            "asset_tag": tag,
-            "category": request.category.value
-        }
+        return {"asset_tag": tag, "category": request.category.value}
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error generando tag de activo")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al generar el tag del activo"
+        )
         
     except HTTPException:
         raise

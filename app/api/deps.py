@@ -264,39 +264,6 @@ def check_permission(user: User, db: Session, required_permission: str) -> bool:
 
 
 # ============================================================================
-# DECORADOR LEGACY (Para compatibilidad con código antiguo)
-# ============================================================================
-
-def require_roles(allowed_roles: List[str]):
-    """
-    DEPRECADO: Usar RoleChecker en su lugar.
-    
-    Este decorador se mantiene solo para compatibilidad con código antiguo.
-    
-    Ejemplo antiguo (NO USAR):
-        @require_roles(["admin"])
-        async def my_endpoint(...):
-            pass
-    
-    Ejemplo nuevo (USAR):
-        async def my_endpoint(
-            current_user: User = Depends(RoleChecker(["admin"]))
-        ):
-            pass
-    """
-    logger.warning("@require_roles está deprecado. Usar RoleChecker en su lugar.")
-    logger.warning(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
-    
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # Este decorador ya no debería usarse
-            # Si se llama, simplemente ejecuta la función
-            return await func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-# ============================================================================
 # EJEMPLOS DE USO
 # ============================================================================
 

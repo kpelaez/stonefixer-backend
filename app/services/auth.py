@@ -183,3 +183,24 @@ def verify_token(token: str):
         return payload
     except InvalidTokenError:
         return None
+    
+
+def change_own_password(db: Session, user: User, current_password: str, new_password: str) -> bool:
+    """El usuario cambia su propia contraseña. Requiere la contraseña actual."""
+    if not verify_password(current_password, user.hashed_password):
+        return False
+
+    user.hashed_password = get_password_hash(new_password)
+    user.password_changed_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc)
+    db.add(user)
+    db.commit()
+    return True
+
+
+def admin_reset_password(db: Session, user: User, new_password: str) -> None:
+    """Admin resetea el password de otro usuario. Fuerza cambio en el próximo login."""
+    user.hashed_password = get_password_hash(new_password)
+    user.updated_at = datetime.now(timezone.utc)
+    db.add(user)
+    db.commit()
