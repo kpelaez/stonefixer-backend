@@ -1,5 +1,5 @@
 from pydantic import field_validator
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import Column, DateTime, SQLModel, Field, Relationship
 from typing import List, Optional, TYPE_CHECKING
 from datetime import datetime, timezone
 
@@ -20,7 +20,7 @@ class User(UserBase, table=True):
 
     # Registro auditable de la última vez que el usuario cambió su propia
     # contraseña (no se usa para bloquear login, solo para trazabilidad)
-    password_changed_at: Optional[datetime] = Field(default=None)
+    password_changed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
     dni_encrypted: Optional[str] = Field(default=None, description="DNI encriptado con Fernet")
     dni_hash: Optional[str] = Field(default=None, index=True, description="Hash SHA256 del DNI para busquedas")

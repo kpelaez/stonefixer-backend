@@ -275,7 +275,6 @@ async def get_asset_statuses(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al obtener los estados")
     
 @router.post("/generate-tag",response_model=dict)
-#@require_roles(["admin", "inventory_manager"])
 async def generate_asset_tag_endpoint(
     request: GenerateAssetTagRequest,
     current_user: User = Depends(require_admin),
