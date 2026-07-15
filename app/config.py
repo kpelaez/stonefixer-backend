@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     APP_NAME: str = "StoneFixer"
     ENVIRONMENT: str = "development"  # development | staging | production
 
-    # Base de datos KPIs
-    KPI_DATABASE_URL: str
-
     # Humand API
     HUMAND_API_URL: str = "https://api-prod.humand.co/public/api/v1"
     HUMAND_API_KEY: str = ""

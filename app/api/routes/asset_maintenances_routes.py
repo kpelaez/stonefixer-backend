@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.db.database import get_db
 from app.models.user import User
-from app.api.deps import get_current_user, require_roles, require_admin
+from app.api.deps import get_current_user, require_admin
 
 # Modelos de Mantenimiento
 from app.models.asset_maintenance import (

@@ -45,7 +45,6 @@ stonefixer-backend/
 │   │   └── rate_limiter.py
 │   ├── db/
 │   │   ├── database.py                # Engine principal + get_db
-│   │   ├── kpi_database.py            # Engine KPI (solo lectura)
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── user.py
@@ -127,8 +126,6 @@ LOG_LEVEL=INFO
 # Base de datos principal
 DATABASE_URL=postgresql://user:password@host:port/dbname
 
-# Base de datos KPI (solo lectura)
-KPI_DATABASE_URL=postgresql://user:password@host:port/kpi_dbname
 
 # JWT
 ACCESS_TOKEN_EXPIRE_MINUTES=480
@@ -195,10 +192,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 - Balance por usuario
 - Tipos: crédito (HE) y débito (compensatorio)
 
-### Indicadores de Negocio (`/api/business-indicators`)
-- KPIs desde base de datos de producción (solo lectura)
-- Facturación vs cobranza
-- Historial y health check
 
 ---
 
