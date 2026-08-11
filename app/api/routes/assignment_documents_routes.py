@@ -3,7 +3,7 @@ from datetime import datetime, timezone
  
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session
+from sqlmodel import Session, update
  
 from app.api.deps import require_admin
 from app.config import settings
@@ -110,91 +110,86 @@ async def _send_to_humand_background(
  
     Crea su propia sesión de DB porque corre fuera del request/response cycle.
     """
-    from app.db.database import get_db as _get_db
+    from app.db.database import get_background_session
     from fastapi import HTTPException
- 
-    db_gen = _get_db()
-    db = next(db_gen)
- 
-    try:
-        assignment = db.get(AssetAssignment, assignment_id)
-        if not assignment:
-            logger.error(
-                f"[BG-Humand] Asignación #{assignment_id} no encontrada en background task"
-            )
-            return
- 
-        # Registrar timestamp del intento
-        assignment.humand_last_attempt_at = datetime.now(timezone.utc)
-        db.add(assignment)
-        db.commit()
- 
-        # Generar PDF
-        logger.info(f"[BG-Humand] Generando PDF — asignación #{assignment_id}")
-        doc_generator = AssignmentDocumentGenerator()
-        pdf_buffer = doc_generator.generate_assignment_pdf(
-            assignment_data=assignment_data,
-            employee_data=employee_data,
-            asset_data=asset_data,
-        )
- 
-        # Enviar a Humand
-        logger.info(f"[BG-Humand] Enviando a Humand — asignación #{assignment_id}")
-        humand_response = await humand_service.upload_assignment_document(
-            employee_dni=employee_dni,
-            pdf_buffer=pdf_buffer,
-            assignment_id=assignment_id,
-            send_notification=send_notification,
-        )
- 
-        # Éxito — actualizar estado
-        now = datetime.now(timezone.utc)
-        assignment.document_sent_to_humand = True
-        assignment.humand_send_status = "SENT"
-        assignment.document_sent_at = now
-        assignment.humand_last_attempt_at = now
-        assignment.humand_document_name = humand_response.get(
-            "name",
-            f"Acta_Entrega_Activo_{assignment_id}.pdf",
-        )
-        assignment.humand_folder_id = settings.HUMAND_FOLDER_ID
-        assignment.humand_error_detail = None
- 
-        db.add(assignment)
-        db.commit()
-        logger.info(f"[BG-Humand] ✓ Enviado y registrado — asignación #{assignment_id}")
- 
-    except HTTPException as exc:
-        # Las HTTPException que lanza humand_service (timeout, 404, 401, etc.)
-        error_detail = exc.detail
-        logger.error(
-            f"[BG-Humand] Error en envío asignación #{assignment_id}: {error_detail}"
-        )
-        assignment = db.get(AssetAssignment, assignment_id)
-        if assignment:
-            assignment.humand_send_status = "FAILED"
-            assignment.humand_error_detail = str(error_detail)[:500]
-            assignment.humand_last_attempt_at = datetime.now(timezone.utc)
-            db.add(assignment)
-            db.commit()
- 
-    except Exception as exc:
-        logger.exception(
-            f"[BG-Humand] Error inesperado asignación #{assignment_id}: {exc}"
-        )
-        assignment = db.get(AssetAssignment, assignment_id)
-        if assignment:
-            assignment.humand_send_status = "FAILED"
-            assignment.humand_error_detail = f"Error inesperado: {str(exc)[:400]}"
-            assignment.humand_last_attempt_at = datetime.now(timezone.utc)
-            db.add(assignment)
-            db.commit()
- 
-    finally:
+
+    with get_background_session() as db:
         try:
-            db_gen.close()
-        except Exception:
-            pass
+            assignment = db.get(AssetAssignment, assignment_id)
+            if not assignment:
+                logger.error(
+                    f"[BG-Humand] Asignación #{assignment_id} no encontrada en background task"
+                )
+                return
+    
+            # Registrar timestamp del intento
+            assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+            db.add(assignment)
+            db.commit()
+    
+            # Generar PDF
+            logger.info(f"[BG-Humand] Generando PDF — asignación #{assignment_id}")
+            doc_generator = AssignmentDocumentGenerator()
+            pdf_buffer = doc_generator.generate_assignment_pdf(
+                assignment_data=assignment_data,
+                employee_data=employee_data,
+                asset_data=asset_data,
+            )
+    
+            # Enviar a Humand
+            logger.info(f"[BG-Humand] Enviando a Humand — asignación #{assignment_id}")
+            humand_response = await humand_service.upload_assignment_document(
+                employee_dni=employee_dni,
+                pdf_buffer=pdf_buffer,
+                assignment_id=assignment_id,
+                send_notification=send_notification,
+            )
+    
+            # Éxito — actualizar estado
+            now = datetime.now(timezone.utc)
+            assignment.document_sent_to_humand = True
+            assignment.humand_send_status = "SENT"
+            assignment.document_sent_at = now
+            assignment.humand_last_attempt_at = now
+            assignment.humand_document_name = humand_response.get(
+                "name",
+                f"Acta_Entrega_Activo_{assignment_id}.pdf",
+            )
+            assignment.humand_folder_id = settings.HUMAND_FOLDER_ID
+            assignment.humand_error_detail = None
+    
+            db.add(assignment)
+            db.commit()
+            logger.info(f"[BG-Humand] ✓ Enviado y registrado — asignación #{assignment_id}")
+    
+        except HTTPException as exc:
+            # Las HTTPException que lanza humand_service (timeout, 404, 401, etc.)
+            db.rollback()
+            error_detail = exc.detail
+            logger.error(
+                f"[BG-Humand] Error en envío asignación #{assignment_id}: {error_detail}"
+            )
+            assignment = db.get(AssetAssignment, assignment_id)
+            if assignment:
+                assignment.humand_send_status = "FAILED"
+                assignment.humand_error_detail = str(error_detail)[:500]
+                assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+                db.add(assignment)
+                db.commit()
+    
+        except Exception as exc:
+            db.rollback()
+            logger.exception(
+                f"[BG-Humand] Error inesperado asignación #{assignment_id}: {exc}"
+            )
+            assignment = db.get(AssetAssignment, assignment_id)
+            if assignment:
+                assignment.humand_send_status = "FAILED"
+                assignment.humand_error_detail = f"Error inesperado: {str(exc)[:400]}"
+                assignment.humand_last_attempt_at = datetime.now(timezone.utc)
+                db.add(assignment)
+                db.commit()
+
  
  
 # Endpoints
@@ -294,11 +289,23 @@ async def send_assignment_document_to_humand(
     asset_data = _build_asset_data(asset)
     assignment_data = _build_assignment_data(assignment)
  
-    # Marcar PENDING antes de encolar (si el worker muere antes de empezar, queda rastreable)
-    assignment.humand_send_status = "PENDING"
-    assignment.humand_error_detail = None
-    db.add(assignment)
+    # Marcar PENDING de forma atómica — evita doble envío por doble clic
+    result = db.execute(
+        update(AssetAssignment)
+        .where(
+            AssetAssignment.id == assignment_id,
+            AssetAssignment.document_sent_to_humand == False,
+            AssetAssignment.humand_send_status != "PENDING",
+        )
+        .values(humand_send_status="PENDING", humand_error_detail=None)
+    )
     db.commit()
+
+    if result.rowcount == 0:
+        raise BusinessRuleViolationError(
+            rule="Envío único simultáneo",
+            reason="Ya hay un envío en curso o el documento ya fue enviado.",
+        )
  
     background_tasks.add_task(
         _send_to_humand_background,
