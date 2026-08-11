@@ -3,7 +3,7 @@ from datetime import datetime, timezone
  
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, update
+from sqlmodel import Session, or_, update
  
 from app.api.deps import require_admin
 from app.config import settings
@@ -295,7 +295,10 @@ async def send_assignment_document_to_humand(
         .where(
             AssetAssignment.id == assignment_id,
             AssetAssignment.document_sent_to_humand == False,
-            AssetAssignment.humand_send_status != "PENDING",
+            or_(
+                AssetAssignment.humand_send_status != "PENDING",
+                AssetAssignment.humand_send_status.is_(None),
+            ),
         )
         .values(humand_send_status="PENDING", humand_error_detail=None)
     )
