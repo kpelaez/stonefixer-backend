@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from typing import Any, Dict, List
@@ -9,8 +9,8 @@ from app.core.dni_security import dni_manager
 
 from app.api.deps import get_current_user, get_user_permissions, require_admin
 from app.db.database import get_db
-from app.models.user import User
-from app.services.auth import add_role_to_user, get_user_roles, remove_role_from_user
+from app.models.user import AdminPasswordReset, PasswordChange, User
+from app.services.auth import add_role_to_user, admin_reset_password, change_own_password, get_user_roles, remove_role_from_user
 
 from app.core.rate_limiter import limiter
 from app.config import settings
@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
+
+
+
 
 # Endpoint para obtener informacion del usuario
 @router.get("/me", response_model=dict)
@@ -47,8 +50,6 @@ async def get_current_user_info(current_user: User = Depends(get_current_user), 
         
     except Exception as e:
         logger.error(f" Error en get_current_user_info: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener información del usuario"
@@ -146,8 +147,6 @@ async def list_users(
     
     except Exception as e:
         logger.error(f" Error en list_users: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener usuarios"
@@ -196,6 +195,22 @@ async def get_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener información del usuario"
         )
+    
+@router.post("/{user_id}/password/reset")
+async def reset_user_password(
+    user_id: int,
+    reset_data: AdminPasswordReset,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin resetea la contraseña de un usuario, sin restricción de complejidad."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    admin_reset_password(db, user, reset_data.new_password)
+    logger.info(f"Admin {current_user.email} reseteó la contraseña del usuario {user_id}")
+    return {"message": "Contraseña reseteada correctamente"}
 
 @router.post("/{user_id}/roles/{role}", response_model=Dict[str, str])
 async def add_role(
@@ -245,8 +260,6 @@ async def add_role(
         raise
     except Exception as e:
         logger.error(f" Error añadiendo rol: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al añadir el rol"
@@ -318,8 +331,6 @@ async def remove_role(
         raise
     except Exception as e:
         logger.error(f" Error eliminando rol: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al eliminar el rol"
@@ -402,8 +413,6 @@ async def get_roles_statistics(
         
     except Exception as e:
         logger.error(f" Error obteniendo estadísticas de roles: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener estadísticas de roles"
@@ -445,5 +454,24 @@ async def update_user_dni(
     
     return {"message": "DNI actualizado exitosamente (encriptado)"}
 
+
+@router.patch("/me/password")
+@limiter.limit(settings.WRITE_RATE_LIMIT)
+async def change_password(
+    request: Request,
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """El usuario cambia su propia contraseña (requiere la actual)."""
+    success = change_own_password(
+        db, current_user, password_data.current_password, password_data.new_password
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La contraseña actual es incorrecta"
+        )
+    return {"message": "Contraseña actualizada correctamente"}
 
 
