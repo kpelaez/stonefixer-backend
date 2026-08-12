@@ -112,6 +112,15 @@ class HumandIntegrationService:
                 )
 
             # Manejo explícito por código de estado de Humand
+
+            if response.status_code == 400:
+                logger.error(f"[Humand] Bad Request (400): {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Datos rechazados por Humand: {response.text}",
+                )
+
+
             if response.status_code == 401:
                 logger.error("[Humand] API key inválida o expirada (401)")
                 raise HTTPException(
