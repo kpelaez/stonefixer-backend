@@ -214,7 +214,7 @@ class HumandIntegrationService:
         """
         coordinates = [
             {
-                "page": 1,
+                "page": 0,
                 "x": 0.10,
                 "y": 0.75,
                 "width": 0.42,
