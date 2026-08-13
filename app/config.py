@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     """
     # Base de datos principal
     DATABASE_URL: str
+    LAKEHOUSE_DATABASE_URL: str
 
     # Autenticación
     SECRET_KEY: str
