@@ -96,7 +96,7 @@ def available_asset(session: Session):
         brand="Dell",
         model="XPS 15",
         serial_number="SN123456",
-        asset_tag="NB-2024-001",
+        asset_tag="NBK-001",
         category=AssetCategory.NOTEBOOK,
         status=AssetStatus.AVAILABLE,
         purchase_date=datetime.now(timezone.utc),
