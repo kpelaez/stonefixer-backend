@@ -147,6 +147,7 @@ class TechAssetSummary(SQLModel):
     serial_number: str
     asset_tag: Optional[str] = None
     category: AssetCategory
+    connector_type: Optional[CableType] = None
     status: AssetStatus
     location: Optional[str] = None
     department: Optional[str] = None
