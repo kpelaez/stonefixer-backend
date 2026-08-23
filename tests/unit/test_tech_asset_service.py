@@ -22,7 +22,8 @@ from app.models.tech_asset import (
     TechAssetCreate,
     TechAssetUpdate,
     AssetCategory,
-    AssetStatus
+    AssetStatus,
+    CableType,
 )
 
 
@@ -38,7 +39,7 @@ def sample_tech_asset_data():
         brand="Dell",
         model="XPS 15 9520",
         serial_number="SN123456789",
-        asset_tag="NB-2024-001",
+        asset_tag="NBK-001",
         category=AssetCategory.NOTEBOOK,
         status=AssetStatus.AVAILABLE,
         description="Laptop de desarrollo",
@@ -142,8 +143,8 @@ class TestGetTechAssets:
         result = get_tech_assets(session)
         
         # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
+        assert result["items"] == []
+        assert result["total"] == 0
     
     def test_get_assets_returns_all(
         self,
@@ -151,12 +152,9 @@ class TestGetTechAssets:
         created_asset: TechAsset
     ):
         """Test: Obtener todos los activos"""
-        # Act
         result = get_tech_assets(session)
-        
-        # Assert
-        assert len(result) >= 1
-        assert any(a.id == created_asset.id for a in result)
+        assert result["total"] >= 1
+        assert any(a.id == created_asset.id for a in result["items"])
 
 
 # ============================================================================
@@ -253,7 +251,7 @@ class TestUpdateTechAsset:
                 brand="HP",
                 model="Pavilion",
                 serial_number="SECOND123",
-                asset_tag="HP-2024-001",
+                asset_tag="HPF-002",
                 category=AssetCategory.NOTEBOOK,
                 purchase_date=datetime.now(timezone.utc)
             )
@@ -390,6 +388,100 @@ class TestGenerateAssetTag:
         assert tag_nb.startswith("NBK-")
         assert tag_dt.startswith("DSK-")
         # Ambos pueden tener el mismo número porque son categorías diferentes
+
+
+class TestAssetTagFormatValidation:
+    """Tests para validación de formato de asset_tag"""
+
+    def test_create_asset_rejects_invalid_tag_format(self, session: Session):
+        data = TechAssetCreate(
+            name="Monitor Dell",
+            brand="Dell",
+            model="P2419H",
+            serial_number="SNVALID001",
+            asset_tag="mon-1",  # formato invalido: minusculas, 1 digito
+            category=AssetCategory.MONITOR,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        with pytest.raises(ValueError, match="formato ABC-000"):
+            create_tech_asset(session, data)
+
+    def test_create_asset_normalizes_lowercase_tag(self, session: Session):
+        data = TechAssetCreate(
+            name="Monitor LG",
+            brand="LG",
+            model="27UL500",
+            serial_number="SNVALID002",
+            asset_tag="mon-001",
+            category=AssetCategory.MONITOR,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        result = create_tech_asset(session, data)
+        assert result.asset_tag == "MON-001"
+
+    def test_create_asset_accepts_none_tag(self, session: Session):
+        data = TechAssetCreate(
+            name="Monitor sin tag",
+            brand="AOC",
+            model="24B1",
+            serial_number="SNVALID003",
+            asset_tag=None,
+            category=AssetCategory.MONITOR,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        result = create_tech_asset(session, data)
+        assert result.asset_tag is None
+
+
+class TestConnectorTypeValidation:
+    """Tests para validación de connector_type solo en categoria Cable"""
+
+    def test_create_cable_with_connector_type_success(self, session: Session):
+        data = TechAssetCreate(
+            name="Cable red 2m",
+            brand="Generico",
+            model="CAT6",
+            serial_number="SNCABLE001",
+            category=AssetCategory.CABLE,
+            connector_type=CableType.RJ45,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        result = create_tech_asset(session, data)
+        assert result.connector_type == CableType.RJ45
+
+    def test_create_non_cable_with_connector_type_fails(self, session: Session):
+        data = TechAssetCreate(
+            name="Monitor con conector invalido",
+            brand="Dell",
+            model="P2419H",
+            serial_number="SNCABLE002",
+            category=AssetCategory.MONITOR,
+            connector_type=CableType.HDMI,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        with pytest.raises(ValueError, match="solo puede asignarse"):
+            create_tech_asset(session, data)
+
+    def test_update_category_away_from_cable_clears_connector(
+        self, session: Session
+    ):
+        data = TechAssetCreate(
+            name="Cable HDMI",
+            brand="Generico",
+            model="HDMI2.0",
+            serial_number="SNCABLE003",
+            category=AssetCategory.CABLE,
+            connector_type=CableType.HDMI,
+            purchase_date=datetime.now(timezone.utc),
+        )
+        asset = create_tech_asset(session, data)
+
+        updated = update_tech_asset(
+            session,
+            asset.id,
+            TechAssetUpdate(category=AssetCategory.OTRO),
+        )
+        assert updated.connector_type is None
 
 
 # ============================================================================
