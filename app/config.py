@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     SWAGGER_USERNAME: str = "admin"
     SWAGGER_PASSWORD: str
 
+    # URL para etiquetas
+    LABEL_BASE_URL: str = "https://stonefixer.mklcoders.com.ar"
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

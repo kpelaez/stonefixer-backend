@@ -19,6 +19,11 @@ from app.models.user import User
 from app.models.role import UserRole
 from app.services.auth import create_access_token, get_password_hash
 
+from app.models.tech_asset import TechAssetWithAssignment
+from app.models.asset_assignment import AssetAssignmentRead
+
+TechAssetWithAssignment.model_rebuild()
+
 
 # ============================================================================
 # DATABASE FIXTURES

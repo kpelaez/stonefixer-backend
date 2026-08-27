@@ -35,6 +35,21 @@ class AssetCategory(str, Enum):
     CABLE = "Cable"
     OTRO = "Otro"
 
+class CableType(str, Enum):
+    """Tipos de conector para activos de categoria Cable"""
+    RJ45 = "RJ45"
+    USB_A = "USB_A"
+    USB_B = "USB_B"
+    USB_C = "USB_C"
+    HDMI = "HDMI"
+    DISPLAYPORT = "DisplayPort"
+    VGA = "VGA"
+    INTERLOCK = "Interlock"
+    AUDIO_JACK = "Audio_Jack"
+    PS2 = "PS2"
+    SATA_ALIMENTACION = "SATA_Alimentacion"
+    OTRO = "Otro"
+
 class TechAssetBase(SQLModel):
     """Modelo base para activos tecnologicos"""
     name: str = Field(index= True, description="Nombre del activo")
@@ -44,6 +59,7 @@ class TechAssetBase(SQLModel):
     serial_number: str = Field(unique = True, description="Numero de serie unico")
     asset_tag: Optional[str] = Field(default=None, unique=True, index=True, description="Etiqueta de activo de la empresa")
     category: AssetCategory = Field(sa_column=Column(String, nullable=False))
+    connector_type: Optional[CableType] = Field(default=None, sa_column=Column(String, nullable=True), description="Tipo de conector, solo aplica si category == Cable")
     status: AssetStatus = Field(default=AssetStatus.AVAILABLE, sa_column=Column(String, nullable=False, default="available"))
 
     # Informacion financiera
@@ -99,6 +115,7 @@ class TechAssetUpdate(SQLModel):
     serial_number: Optional[str] = None
     asset_tag: Optional[str] = None
     category: Optional[AssetCategory] = None
+    connector_type: Optional[CableType] = None
     status: Optional[AssetStatus] = None
 
     # Informacion financiera
@@ -130,6 +147,7 @@ class TechAssetSummary(SQLModel):
     serial_number: str
     asset_tag: Optional[str] = None
     category: AssetCategory
+    connector_type: Optional[CableType] = None
     status: AssetStatus
     location: Optional[str] = None
     department: Optional[str] = None
