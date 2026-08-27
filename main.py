@@ -13,6 +13,7 @@ import time
 import base64
 
 from app.core.exceptions import register_exception_handlers
+from app.core.middleware import register_cors, register_middlewares
 from app.db.database import create_db_and_tables, engine
 from app.config import settings
 
@@ -52,17 +53,7 @@ TechAssetWithAssignment.model_rebuild()
 logger.info("Modelos Pydantic reconstruidos correctamente")
 
 
-# Importar routers 
-from app.api.routes.auth_routes import router as auth_router
-from app.api.routes.users_routes import router as users_router
-from app.api.routes.assignment_documents_routes import router as assignment_documents_router
-from app.api.routes.tech_assets_routes import router as tech_assets_router
-from app.api.routes.asset_assignments_routes import router as asset_assignments_router
-from app.api.routes.asset_maintenances_routes import router as asset_maintenances_router
-from app.api.routes.business_indicators_routes import router as business_indicators_router
-from app.api.routes.shift_schedule_routes import router as shift_schedule_router
-from app.api.routes.overtime_routes import router as overtime_router
-from app.api.routes.dashboard_routes import router as dashboard_router
+
 
 # Instancia de la app
 app = FastAPI(
@@ -75,95 +66,20 @@ app = FastAPI(
 # Handlers de error centralizado
 register_exception_handlers(app)
 
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next: RequestResponseEndpoint):
-    """Registra duración y status de cada request. Advierte sobre lentos o errores."""
-
-    start_time = time.time()
-
-    # Log de request
-    logger.info(f"→ {request.method} {request.url.path}")
-    
-    # Procesar request
-    response = await call_next(request)
-    
-    # Calcular tiempo de procesamiento
-    process_time = time.time() - start_time
-    
-    # Log solo requests lentos o con errores
-    if process_time > 1.0 or response.status_code >= 400:
-        logger.warning(
-            f"{request.method} {request.url} - "
-            f"Status: {response.status_code} - "
-            f"Time: {process_time:.3f}s"
-        )
-    else:
-        logger.info(
-            f"← {request.method} {request.url.path} - "
-            f"Status: {response.status_code} - "
-            f"Time: {process_time:.3f}s"
-        )
-    
-    # Agregar header de tiempo de respuesta
-    response.headers["X-Process-Time"] = str(process_time)
-    
-    return response
-
-# Middleware de Security Headers 
-@app.middleware("http")
-async def security_headers_middleware(request: Request, call_next: RequestResponseEndpoint):
-    """Inyecta security headers en todas las respuestas."""
-    response = await call_next(request)
-    
-    # Previene que el browser interprete archivos con MIME type incorrecto
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    
-    # Previene clickjacking — la app no puede ser embebida en un iframe
-    response.headers["X-Frame-Options"] = "DENY"
-    
-    # Fuerza HTTPS en producción (navegadores recuerdan esto por 1 año)
-    if settings.is_production():
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    
-    # Controla qué información se envía en el header Referer
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
-    # Deshabilita funcionalidades del browser que no necesitamos
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    
-    # Elimina el header que revela que usamos uvicorn/Python
-    if "server" in response.headers:
-        del response.headers["server"]
-    
-    return response
+# Middlewares
+register_middlewares(app)
 
 # Configurar CORS
 
 allowed_origins = settings.get_allowed_origins()
 logger.info(f"CORS permitido para: {allowed_origins}")
 
-# Middlewares
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
-    expose_headers=["X-Process-Time", "Content-Disposition"],
-)
+register_cors(app)
 
+# Importar routers 
+from app.api.api import api_router
 # REGISTRAR ROUTERS
-app.include_router(auth_router, prefix="/api/v1/auth" ,tags=["Autenticacion"])
-app.include_router(users_router, prefix="/api/v1/users", tags=["Usuarios"])
-app.include_router(tech_assets_router, prefix="/api/v1/inventory/tech-assets",tags=["Inventario - Activos Tech"])
-app.include_router(asset_assignments_router, prefix="/api/v1/inventory/assignments", tags=["Inventario - Asignaciones"])
-app.include_router(asset_maintenances_router,prefix="/api/v1/inventory/maintenance",tags=["Inventario - Mantenimiento"])
-app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
-app.include_router(shift_schedule_router, prefix="/api/v1/shift-schedules", tags=["Shift Scheduling"])
-app.include_router(business_indicators_router, prefix="/api/v1/business-indicators", tags=["Business Indicators"])
-app.include_router(assignment_documents_router, prefix="/api/v1/assignments", tags=["Assignment Documents"])
-app.include_router(overtime_router, prefix="/api/v1/overtime", tags=["Horas Extras"])
+app.include_router(api_router)
 
 
 

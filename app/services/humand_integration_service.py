@@ -112,6 +112,15 @@ class HumandIntegrationService:
                 )
 
             # Manejo explícito por código de estado de Humand
+
+            if response.status_code == 400:
+                logger.error(f"[Humand] Bad Request (400): {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Datos rechazados por Humand: {response.text}",
+                )
+
+
             if response.status_code == 401:
                 logger.error("[Humand] API key inválida o expirada (401)")
                 raise HTTPException(
@@ -194,7 +203,7 @@ class HumandIntegrationService:
         Coordenadas de la zona de firma en el PDF.
 
         Sistema de coordenadas de Humand (página base-1):
-        - page:   número de página (1 = primera)
+        - page:   número de página (0 = primera)
         - x:      posición horizontal desde el borde izquierdo (0.0 a 1.0)
         - y:      posición vertical desde el borde SUPERIOR (0.0 a 1.0)
         - width:  ancho de la zona de firma como fracción del ancho de página
@@ -205,11 +214,11 @@ class HumandIntegrationService:
         """
         coordinates = [
             {
-                "page": 1,
+                "page": 0,
                 "x": 0.10,
                 "y": 0.75,
                 "width": 0.42,
-                "height": 0.06,
+                "height": 0.08,
             }
         ]
         return json.dumps(coordinates)

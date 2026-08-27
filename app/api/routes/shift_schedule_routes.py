@@ -164,7 +164,7 @@ def create_shift_schedule(
 
 
     # Validaciones usando el usuario destino, no el current_user
-    ShiftScheduleService.validate_date(shift_data.date)
+    ShiftScheduleService.validate_date(shift_data.date, is_supervisor=is_supervisor)
     
     ShiftScheduleService.validate_early_shift_capacity(db, shift_data.date, shift_data.shift_type)
     
@@ -204,6 +204,8 @@ def update_shift_schedule(
     
     # Obtener roles del usuario actual
     user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
+
 
     # Validar deadline
     ShiftScheduleService.validate_modification_deadline(
@@ -215,7 +217,7 @@ def update_shift_schedule(
     
     # Si cambia la fecha, validar nueva fecha
     if shift_data.date and shift_data.date != shift.date:
-        ShiftScheduleService.validate_date(shift_data.date)
+        ShiftScheduleService.validate_date(shift_data.date, is_supervisor=is_supervisor)
         ShiftScheduleService.validate_duplicate_assignment(
             db, shift.user_id, shift_data.date, exclude_shift_id=shift_id
         )
@@ -236,9 +238,8 @@ def update_shift_schedule(
         shift.status = shift_data.status
     if shift_data.notes is not None:
         shift.notes = shift_data.notes
-    
+
     # Auditoría
-    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
     if is_supervisor and current_user.id != shift.user_id:
         shift.modified_by_user_id = current_user.id
     
@@ -289,6 +290,24 @@ def delete_shift_schedule(
     db.commit()
     
     return None
+
+@router.get("/team-members")
+def get_team_members(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Listar usuarios activos para el selector de asignación de turnos.
+    Solo admin/manager pueden usarlo (para asignar turnos a otros).
+    """
+    user_roles = get_user_roles_list(current_user.id, db)
+    if not any(role in ["admin", "manager"] for role in user_roles):
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    users = db.exec(
+        select(User).where(User.is_active == True).order_by(User.full_name)
+    ).all()
+    return [{"id": u.id, "full_name": u.full_name} for u in users]
 
 
 # === ENDPOINTS DE ESTADÍSTICAS ===

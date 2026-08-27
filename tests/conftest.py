@@ -183,8 +183,7 @@ def regular_user(session: Session):
 def auth_headers_admin(admin_user: User):
     """Headers de autenticación para admin"""
     token = create_access_token(
-        data={"sub": admin_user.email},
-        user_roles=["admin"]
+        data={"sub": admin_user.email}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -193,8 +192,7 @@ def auth_headers_admin(admin_user: User):
 def auth_headers_manager(manager_user: User):
     """Headers de autenticación para manager"""
     token = create_access_token(
-        data={"sub": manager_user.email},
-        user_roles=["manager"]
+        data={"sub": manager_user.email}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -203,8 +201,7 @@ def auth_headers_manager(manager_user: User):
 def auth_headers_user(regular_user: User):
     """Headers de autenticación para usuario regular"""
     token = create_access_token(
-        data={"sub": regular_user.email},
-        user_roles=["user"]
+        data={"sub": regular_user.email}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -280,3 +277,25 @@ def reset_database(session: Session):
     """Limpiar base de datos antes de cada test"""
     yield
     # El rollback en session_fixture ya limpia todo
+
+
+
+@pytest.fixture
+def auth_cookies_admin(admin_user: User):
+    """Cookie de autenticación para admin"""
+    token = create_access_token(data={"sub": admin_user.email})
+    return {"access_token": token}
+
+
+@pytest.fixture
+def auth_cookies_manager(manager_user: User):
+    """Cookie de autenticación para manager"""
+    token = create_access_token(data={"sub": manager_user.email})
+    return {"access_token": token}
+
+
+@pytest.fixture
+def auth_cookies_user(regular_user: User):
+    """Cookie de autenticación para usuario regular"""
+    token = create_access_token(data={"sub": regular_user.email})
+    return {"access_token": token}
