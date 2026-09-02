@@ -28,7 +28,8 @@ _KPI_COLUMNS = """
     venta_bruta_cm,
     contribucion_marginal_pct,
     anio,
-    mes
+    mes,
+    "Ordenes_compra" AS ordenes_compra
 """
 
 
