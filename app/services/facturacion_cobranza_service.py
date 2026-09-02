@@ -29,7 +29,7 @@ _KPI_COLUMNS = """
     contribucion_marginal_pct,
     anio,
     mes,
-    "Ordenes_compra" AS ordenes_compra
+    ordenes_compra
 """
 
 
