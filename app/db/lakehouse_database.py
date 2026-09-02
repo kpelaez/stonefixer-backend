@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 lakehouse_engine = build_readonly_engine(
     settings.LAKEHOUSE_DATABASE_URL,
-    pool_size=5,
-    max_overflow=5,
+    pool_size=3,
+    max_overflow=2,
     echo=settings.DEBUG,
 )
 
