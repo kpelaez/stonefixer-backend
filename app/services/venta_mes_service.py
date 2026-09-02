@@ -7,23 +7,19 @@ logger = logging.getLogger(__name__)
 
 def get_venta_mes_kpis(
     db: Session,
-    fecha_desde: Optional[str] = None,
-    fecha_hasta: Optional[str] = None,
+    anio: int,
+    mes: Optional[int] = None,
 ) -> VentaMesKpis:
     query = text("""
         SELECT
-            COALESCE(SUM(importe), 0) AS ordenes_compra,
-            COUNT(*) AS cantidad_ots,
-            MAX(data_asof)::text AS data_asof
+            COALESCE(SUM(Ordenes_compra), 0) AS ordenes_compra
         FROM prod.kpi_panel_ejecutivo
-        WHERE (:fecha_desde IS NULL OR fecha_generacion >= :fecha_desde)
-          AND (:fecha_hasta IS NULL OR fecha_generacion <= :fecha_hasta)
+        WHERE anio = :anio
+          AND (:mes IS NULL OR mes = :mes)
     """)
-    result = db.exec(query, params={"fecha_desde": fecha_desde, "fecha_hasta": fecha_hasta})
+    result = db.exec(query, params={"anio": anio, "mes": mes})
     row = result.first()
 
     return VentaMesKpis(
-        venta_total=float(row.venta_total) if row else 0.0,
-        cantidad_ots=int(row.cantidad_ots) if row else 0,
-        data_asof=row.data_asof if row else None,
+        ordenes_compra=float(row.ordenes_compra) if row and row.ordenes_compra is not None else 0.0,
     )
