@@ -31,6 +31,7 @@ logger.info(f"Debug: {settings.DEBUG}")
 
 # Importacion de todos los modelos
 from app.models import (User, UserRole, Role, TechAsset, AssetAssignment, AssetMaintenance, OvertimeEntry)
+from app.models.rbac import RoleDB, Module, Permission, RolePermission
 
 # Crear tablas
 create_db_and_tables()

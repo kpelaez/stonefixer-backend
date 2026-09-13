@@ -26,6 +26,7 @@ from app.models.asset_maintenance import AssetMaintenance
 from app.models.role import Role
 from app.models.user import User
 from app.models.overtime import OvertimeEntry
+from app.models.rbac import RoleDB, Module, Permission, RolePermission
 
 from sqlmodel import SQLModel
 
