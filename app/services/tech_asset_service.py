@@ -1,6 +1,10 @@
+import logging
 from typing import Optional
 from sqlmodel import Session, select, func
 from datetime import datetime, timezone
+import re
+
+ASSET_TAG_PATTERN = re.compile(r"^[A-Z]{3}-\d{3,}$")
 
 from app.models.tech_asset import (
     TechAsset, 
@@ -15,6 +19,9 @@ from app.models.tech_asset import (
 
 from app.models.asset_assignment import AssetAssignment, AssignmentStatus
 from app.models.user import User
+
+
+logger = logging.getLogger(__name__)
 
 # MÁQUINA DE ESTADOS - Transiciones Permitidas
 
@@ -49,6 +56,20 @@ ALLOWED_STATE_TRANSITIONS = {
         AssetStatus.RETIRED  # Estado final, no puede cambiar
     }
 }
+
+
+def _validate_asset_tag_format(asset_tag: Optional[str]) -> Optional[str]:
+    """Normaliza y valida formato PREFIJO-NUMERO. Devuelve el tag normalizado."""
+    if not asset_tag:
+        return asset_tag
+    normalized = asset_tag.strip().upper()
+    if not ASSET_TAG_PATTERN.match(normalized):
+        raise ValueError(
+            "El asset_tag debe tener el formato ABC-000 "
+            "(3 letras mayúsculas, guion, 3 o más dígitos)"
+        )
+    return normalized
+
 
 def validate_state_transition(
     current_status: AssetStatus,
@@ -94,6 +115,10 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     Raises:
         ValueError: Si hay duplicados o datos inválidos
     """
+
+    # Validar y normalizar formato de asset_tag
+    tech_asset.asset_tag = _validate_asset_tag_format(tech_asset.asset_tag)
+
     # Validar asset_tag único
     if tech_asset.asset_tag:
         existing_tag = db.exec(
@@ -118,6 +143,12 @@ def create_tech_asset(db: Session, tech_asset: TechAssetCreate):
     if existing_serial:
         raise ValueError(
             f"Ya existe un activo {tech_asset.brand} con número de serie: {tech_asset.serial_number}"
+        )
+
+    # Validar que connector_type solo aplique a categoria Cable
+    if tech_asset.connector_type and tech_asset.category != AssetCategory.CABLE:
+        raise ValueError(
+            "connector_type solo puede asignarse a activos de categoria Cable"
         )
     
     # Crear el activo
@@ -323,6 +354,9 @@ def update_tech_asset(db: Session, tech_asset_id: int, tech_asset_update: TechAs
     # Obtener datos de actualización excluyendo campos no establecidos
     update_data = tech_asset_update.model_dump(exclude_unset=True)
 
+    if "asset_tag" in update_data:
+        update_data["asset_tag"] = _validate_asset_tag_format(update_data["asset_tag"])
+
     # Verificar unicidad de asset_tag si se está actualizando
     if "asset_tag" in update_data and update_data["asset_tag"]:
         existing_tag = db.exec(
@@ -335,6 +369,22 @@ def update_tech_asset(db: Session, tech_asset_id: int, tech_asset_update: TechAs
         if existing_tag:
             raise ValueError(
                 f"Ya existe un activo con la etiqueta: {update_data['asset_tag']}"
+            )
+
+    # Validar consistencia connector_type / category
+    final_category = update_data.get("category", asset.category)
+    final_connector = update_data.get("connector_type", asset.connector_type)
+
+    if final_connector and final_category != AssetCategory.CABLE:
+        if "category" in update_data:
+            update_data["connector_type"] = None
+            logger.warning(
+                f"connector_type limpiado automáticamente en activo {tech_asset_id} "
+                f"por cambio de categoría a {final_category.value}"
+            )
+        else:
+            raise ValueError(
+                "connector_type solo puede asignarse a activos de categoria Cable"
             )
     
     # FIX BUG #3: Validar transiciones de estado

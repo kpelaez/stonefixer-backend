@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from app.db.database import get_db
@@ -18,6 +19,7 @@ from app.models.user import User
 
 from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
 from app.schemas.common import PaginatedResponse
+from app.services.label_export_service import generate_label_export
 from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count, get_asset_statistics, get_warranty_expiring_assets
 
 from app.core.rate_limiter import limiter
@@ -130,6 +132,35 @@ async def get_warranty_expiring_endpoint(
     except Exception as e:
         logger.error(f"Error obteniendo garantías: {e}")
         raise HTTPException(status_code=500, detail="Error al obtener garantías")
+
+
+@router.get("/export-labels")
+async def export_labels_endpoint(
+    ids: Optional[List[int]] = Query(default=None),
+    category: Optional[AssetCategory] = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Exporta un Excel con dos hojas (B1, D110) para importar
+    en la app Niimbot y generar las etiquetas físicas.
+    """
+    buffer, b1_count, d110_count = generate_label_export(db, ids=ids, category=category)
+
+    if b1_count == 0 and d110_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay activos con asset_tag para exportar con los filtros dados"
+        )
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=stonefixer_etiquetas.xlsx"
+        }
+    )
+
 
 
 @router.get("/{asset_id}", response_model=TechAssetWithAssignment)

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     """
     # Base de datos principal
     DATABASE_URL: str
+    LAKEHOUSE_DATABASE_URL: str
 
     # Autenticación
     SECRET_KEY: str
@@ -68,6 +69,9 @@ class Settings(BaseSettings):
     # Swagger
     SWAGGER_USERNAME: str = "admin"
     SWAGGER_PASSWORD: str
+
+    # URL para etiquetas
+    LABEL_BASE_URL: str = "https://stonefixer.mklcoders.com.ar"
 
     @field_validator("SECRET_KEY")
     @classmethod
