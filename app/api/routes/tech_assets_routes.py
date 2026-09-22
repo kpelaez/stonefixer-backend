@@ -110,7 +110,7 @@ async def get_tech_assets_endpoint(
 @router.get("/statistics/overview")
 async def get_asset_statistics_endpoint(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
     """Obtener estadísticas generales de activos tecnológicos"""
     try:
@@ -124,7 +124,7 @@ async def get_asset_statistics_endpoint(
 async def get_warranty_expiring_endpoint(
     days_ahead: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
     """Obtener activos con garantía por vencer"""
     try:
@@ -169,7 +169,7 @@ async def get_tech_asset_endpoint(
     request: Request,
     asset_id: int, 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
 
     """
@@ -260,7 +260,7 @@ async def delete_asset_endpoint(
         )
 
 @router.get("/{asset_id}/maintenance-history")
-async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: User = Depends(PermissionChecker(module_code="inventario", action="view")), db: Session = Depends(get_db)):
     """Obtener historial de mantenimiento del activo"""
     from app.services.asset_maintenance_service import get_asset_maintenance_history
 
