@@ -66,7 +66,7 @@ async def get_tech_assets_endpoint(
     category: Optional[AssetCategory] = Query(default=None, description="Filtrar por categoría"),
     location: Optional[str] = Query(default=None, description="Filtrar por ubicación"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view")),
 ):
     """
     Obtener lista de activos paginada tecnologicos con paginacion
@@ -328,13 +328,3 @@ async def generate_asset_tag_endpoint(
             detail="Error al generar el tag del activo"
         )
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] Error generando tag: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al generar el tag del activo"
-        )
