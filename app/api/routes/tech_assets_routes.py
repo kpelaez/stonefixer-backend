@@ -161,12 +161,6 @@ async def export_labels_endpoint(
         }
     )
 
-@router.get("/debug/check-permission-test")
-async def check_permission_test(
-    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
-):
-    return {"message": f"OK, {current_user.email} tiene inventario:view"}
-
 
 
 @router.get("/{asset_id}", response_model=TechAssetWithAssignment)
