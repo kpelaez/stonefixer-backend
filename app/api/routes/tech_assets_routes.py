@@ -17,7 +17,7 @@ from app.models.tech_asset import (
 )
 from app.models.user import User
 
-from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
+from app.api.deps import PermissionChecker, get_current_user, RoleChecker, require_inventory_manager, require_admin
 from app.schemas.common import PaginatedResponse
 from app.services.label_export_service import generate_label_export
 from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count, get_asset_statistics, get_warranty_expiring_assets
@@ -160,6 +160,12 @@ async def export_labels_endpoint(
             "Content-Disposition": "attachment; filename=stonefixer_etiquetas.xlsx"
         }
     )
+
+@router.get("/debug/check-permission-test")
+async def check_permission_test(
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
+):
+    return {"message": f"OK, {current_user.email} tiene inventario:view"}
 
 
 
