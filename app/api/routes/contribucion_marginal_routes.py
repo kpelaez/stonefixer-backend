@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 import logging
 
-from app.api.deps import require_manager
 from app.models.user import User
 from app.db.lakehouse_database import get_lakehouse_db
 from app.services.contribucion_marginal_service import (
@@ -21,6 +20,7 @@ from app.services.contribucion_marginal_service import (
     get_registros as get_registros_svc,
     get_ranking_clientes as get_ranking_clientes_svc,
 )
+from app.api.deps import PermissionChecker
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 def get_contribucion_marginal_kpis(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """
@@ -60,7 +60,7 @@ def get_registros(
     order_dir: str = "desc",
     limit: int = 100,
     offset: int = 0,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Listado fila por fila para la tabla de OTs del dashboard de CM."""
@@ -83,7 +83,7 @@ def get_ranking_clientes(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
     limit: int = 20,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Top clientes por contribución marginal, para el gráfico de ranking."""
@@ -98,7 +98,7 @@ def get_ranking_clientes(
 @router.get("/kpis/por-mes")
 def get_contribucion_marginal_kpis_por_mes(
     meses: int = 12,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Breakdown mes a mes (últimos N meses), para gráficos de tendencia."""

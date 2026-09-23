@@ -61,9 +61,9 @@ async def cancel(
     request: Request,
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="create")),
 ):
-    return cancel_entry(db, entry_id, requesting_user_id=current_user.id)
+    return cancel_entry(db, entry_id, requesting_user_id=current_user.id, is_manager=_is_manager(current_user))
 
 
 @router.get("/balance/{user_id}", response_model=OvertimeBalanceRead)
