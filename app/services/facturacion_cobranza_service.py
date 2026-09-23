@@ -23,10 +23,7 @@ _KPI_COLUMNS = """
     anio_mes_orden,
     facturado,
     cobrado,
-    contribucion_marginal,
     giro_negocio_pct,
-    venta_bruta_cm,
-    contribucion_marginal_pct,
     anio,
     mes,
     ordenes_compra
