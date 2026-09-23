@@ -8,6 +8,18 @@ from app.models.user import User, UserCreate, UserRead
 from app.models.role import UserRole, Role
 from typing import List
 
+
+# Mapeo temporal rol legacy (string) -> role_id nuevo, mientras conviven
+# los dos sistemas (Fase A/B de RBAC). Cuando se complete la Fase B y
+# se retire UserRole.role, este mapeo y todo lo que lo usa se elimina.
+ROLE_STRING_TO_ID = {
+    'admin': 5,             # Administrador
+    'manager': 3,             # Gerente
+    'inventory_manager': 2,  # Jefe
+    'user': 1,                 # Analista
+}
+
+
 # Configuración para el hash de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -65,7 +77,12 @@ def create_user(db: Session, user_create: UserCreate):
 
     # Asignar roles al usuario
     for role in roles_to_add:
-        user_role = UserRole(user_id=db_user.id, role=role)
+        if role not in ROLE_STRING_TO_ID:
+            raise ValueError(
+                f"El rol '{role}' no tiene un mapeo a role_id definido en "
+                f"ROLE_STRING_TO_ID. Actualizá el mapeo antes de asignar este rol."
+            )
+        user_role = UserRole(user_id=db_user.id, role=role, role_id=ROLE_STRING_TO_ID.get(role))
         db.add(user_role)
     
     db.commit()
@@ -114,6 +131,12 @@ def add_role_to_user(db: Session, user_id: int, role: str) -> bool:
     valid_roles = [r.value for r in Role]
     if role not in valid_roles:
         return False
+
+    if role not in ROLE_STRING_TO_ID:
+        raise ValueError(
+            f"El rol '{role}' no tiene un mapeo a role_id definido en "
+            f"ROLE_STRING_TO_ID. Actualizá el mapeo antes de asignar este rol."
+        )
     
     # Verificar si el usuario ya tiene el rol consultando directo a la DB
     existing = db.exec(
@@ -126,7 +149,7 @@ def add_role_to_user(db: Session, user_id: int, role: str) -> bool:
     if existing:
         return True  # Idempotente: ya lo tiene, no es un error
 
-    user_role = UserRole(user_id=user_id, role=role)
+    user_role = UserRole(user_id=user_id, role=role, role_id=ROLE_STRING_TO_ID.get(role))
     db.add(user_role)
     db.commit()
     return True
