@@ -15,6 +15,7 @@ import logging
 from app.models.user import User
 from app.db.lakehouse_database import get_lakehouse_db
 from app.services.contribucion_marginal_service import (
+    PeriodoInvalido,
     get_kpis_periodo,
     get_kpis_por_mes,
     get_registros as get_registros_svc,
@@ -41,13 +42,19 @@ def get_contribucion_marginal_kpis(
       - fecha_hasta: 'YYYY-MM-DD'
     """
     try:
-        return get_kpis_periodo(db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+        kpis = get_kpis_periodo(db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+    except PeriodoInvalido as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error obteniendo KPIs de Contribución Marginal: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Error al consultar el lakehouse. Intentá de nuevo en unos minutos.",
         )
+
+    if kpis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay datos para ese período.")
+    return kpis
 
 
 @router.get("/registros")
