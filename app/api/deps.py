@@ -2,12 +2,14 @@ from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from jwt.exceptions import InvalidTokenError
-from sqlmodel import Session
+from sqlmodel import Session, select
 from typing import List, Optional
 from functools import wraps
 
 from app.config import settings
 from app.db.database import get_db
+from app.models.rbac import Module, Permission, RoleDB, RolePermission
+from app.models.role import UserRole
 from app.models.user import User
 from app.services.auth import get_user_by_email, get_user_roles
 
@@ -264,39 +266,6 @@ def check_permission(user: User, db: Session, required_permission: str) -> bool:
 
 
 # ============================================================================
-# DECORADOR LEGACY (Para compatibilidad con código antiguo)
-# ============================================================================
-
-def require_roles(allowed_roles: List[str]):
-    """
-    DEPRECADO: Usar RoleChecker en su lugar.
-    
-    Este decorador se mantiene solo para compatibilidad con código antiguo.
-    
-    Ejemplo antiguo (NO USAR):
-        @require_roles(["admin"])
-        async def my_endpoint(...):
-            pass
-    
-    Ejemplo nuevo (USAR):
-        async def my_endpoint(
-            current_user: User = Depends(RoleChecker(["admin"]))
-        ):
-            pass
-    """
-    logger.warning("@require_roles está deprecado. Usar RoleChecker en su lugar.")
-    logger.warning(f"Ejemplo: current_user: User = Depends(RoleChecker({allowed_roles}))")
-    
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # Este decorador ya no debería usarse
-            # Si se llama, simplemente ejecuta la función
-            return await func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-# ============================================================================
 # EJEMPLOS DE USO
 # ============================================================================
 
@@ -354,6 +323,46 @@ EJEMPLOS DE CÓMO USAR EL NUEVO SISTEMA:
 """
 
 
+class PermissionChecker:
+    """
+    Verifica un permiso (módulo + acción) vía la matriz role_permissions,
+    usando UserRole.role_id — la columna nueva que conecta con el
+    sistema RBAC, en paralelo al `role` string legacy que sigue
+    usando RoleChecker.
+    """
+    def __init__(self, module_code: str, action: str):
+        self.module_code = module_code
+        self.action = action
+
+    def __call__(
+        self,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        statement = (
+            select(RolePermission)
+            .join(Permission, RolePermission.permission_id == Permission.id)
+            .join(Module, Permission.module_id == Module.id)
+            .join(UserRole, UserRole.role_id == RolePermission.role_id)
+            .where(
+                UserRole.user_id == current_user.id,
+                Module.code == self.module_code,
+                Permission.action == self.action,
+            )
+        )
+        has_permission = db.exec(statement).first() is not None
+
+        if not has_permission:
+            logger.warning(
+                f"Permiso denegado: {current_user.email} intentó "
+                f"{self.module_code}:{self.action}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"No tenés permiso para realizar esta acción ({self.module_code}:{self.action})",
+            )
+
+        return current_user
 
 
 

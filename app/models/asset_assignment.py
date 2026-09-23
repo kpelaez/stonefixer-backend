@@ -49,10 +49,43 @@ class AssetAssignment(AssetAssignmentBase, table=True):
     updated_at: Optional[datetime] = Field(default=None, description="Fecha de ultima actualizacion")
 
     # Integracion con Humand
-    humand_document_name: Optional[str] = Field(default=None, description="Nombre del documento en Humand")
-    document_sent_to_humand: bool = Field(default=False, description="Si el documento fue enviado a Humand")
-    document_sent_at: Optional[datetime] = Field(default=None, description="Fecha de envio a Humand")
-    humand_folder_id: Optional[int] = Field(default=None, description="ID de carpeta en Humand")
+    # Estado del envío a Humand - Valores posibles: None | "PENDING" | "SENT" | "FAILED"
+    humand_send_status: Optional[str] = Field(
+        default=None,
+        description="Estado del envío a Humand: PENDING | SENT | FAILED",
+    )
+    
+    # Mantener compatibilidad con código existente — se actualiza junto con humand_send_status
+    document_sent_to_humand: bool = Field(
+        default=False,
+        description="True cuando el documento fue enviado y confirmado por Humand",
+    )
+    
+    document_sent_at: Optional[datetime] = Field( 
+        default=None,
+        description="Timestamp UTC del envío exitoso a Humand",
+    )
+    
+    humand_document_name: Optional[str] = Field(
+        default=None,
+        description="Nombre del archivo subido a Humand",
+    )
+    
+    humand_folder_id: Optional[int] = Field(
+        default=None,
+        description="ID de la carpeta en Humand donde se guardó el documento",
+    )
+    
+    # Trazabilidad de errores
+    humand_error_detail: Optional[str] = Field(
+        default=None,
+        description="Detalle del error si humand_send_status == FAILED",
+    )
+    
+    humand_last_attempt_at: Optional[datetime] = Field( 
+        default=None,
+        description="Timestamp del último intento de envío (exitoso o fallido)",
+    )
     
     # Relaciones
     tech_asset: Optional["TechAsset"] = Relationship(back_populates="assignments")
@@ -120,6 +153,9 @@ class AssetAssignmentWithDetails(AssetAssignmentRead):
     document_sent_at: Optional[datetime] = None
     humand_document_name: Optional[str] = None
     humand_folder_id: Optional[int] = None
+    humand_send_status: Optional[str] = None
+    humand_error_detail: Optional[str] = None
+    humand_last_attempt_at: Optional[datetime] = None
 
 class UserAssignmentSummary(SQLModel):
     """Resumen de asignaciones por usuario"""

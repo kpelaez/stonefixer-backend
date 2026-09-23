@@ -143,17 +143,39 @@ def create_shift_schedule(
     """
     Crear un nuevo turno (usuario se auto-asigna)
     """
-    # Validaciones
-    ShiftScheduleService.validate_date(shift_data.date)
+
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
+
+    # Determinar a quién se le asigna el turno
+    if shift_data.target_user_id and shift_data.target_user_id != current_user.id:
+        if not is_supervisor:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores pueden asignar turnos a otros usuarios"
+            )
+        # Verificar que el usuario destino existe
+        target_user = db.get(User, shift_data.target_user_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Usuario destino no encontrado")
+        assigned_user_id = shift_data.target_user_id
+    else:
+        assigned_user_id = current_user.id
+
+
+    # Validaciones usando el usuario destino, no el current_user
+    ShiftScheduleService.validate_date(shift_data.date, is_supervisor=is_supervisor)
     
     ShiftScheduleService.validate_early_shift_capacity(db, shift_data.date, shift_data.shift_type)
     
-    ShiftScheduleService.validate_duplicate_assignment(db, current_user.id, shift_data.date)
+    ShiftScheduleService.validate_duplicate_assignment(db, assigned_user_id, shift_data.date)
     
     # Crear turno
+    shift_dict = shift_data.model_dump(exclude={"target_user_id"})
     new_shift = ShiftSchedule(
-        **shift_data.model_dump(),
-        user_id=current_user.id,
+        **shift_dict,
+        user_id=assigned_user_id,
+        modified_by_user_id=current_user.id if assigned_user_id != current_user.id else None,
     )
     
     db.add(new_shift)
@@ -182,6 +204,8 @@ def update_shift_schedule(
     
     # Obtener roles del usuario actual
     user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
+
 
     # Validar deadline
     ShiftScheduleService.validate_modification_deadline(
@@ -193,7 +217,7 @@ def update_shift_schedule(
     
     # Si cambia la fecha, validar nueva fecha
     if shift_data.date and shift_data.date != shift.date:
-        ShiftScheduleService.validate_date(shift_data.date)
+        ShiftScheduleService.validate_date(shift_data.date, is_supervisor=is_supervisor)
         ShiftScheduleService.validate_duplicate_assignment(
             db, shift.user_id, shift_data.date, exclude_shift_id=shift_id
         )
@@ -214,9 +238,8 @@ def update_shift_schedule(
         shift.status = shift_data.status
     if shift_data.notes is not None:
         shift.notes = shift_data.notes
-    
+
     # Auditoría
-    is_supervisor = any(role in ["admin", "manager"] for role in user_roles)
     if is_supervisor and current_user.id != shift.user_id:
         shift.modified_by_user_id = current_user.id
     
@@ -268,6 +291,24 @@ def delete_shift_schedule(
     
     return None
 
+@router.get("/team-members")
+def get_team_members(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Listar usuarios activos para el selector de asignación de turnos.
+    Solo admin/manager pueden usarlo (para asignar turnos a otros).
+    """
+    user_roles = get_user_roles_list(current_user.id, db)
+    if not any(role in ["admin", "manager"] for role in user_roles):
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    users = db.exec(
+        select(User).where(User.is_active == True).order_by(User.full_name)
+    ).all()
+    return [{"id": u.id, "full_name": u.full_name} for u in users]
+
 
 # === ENDPOINTS DE ESTADÍSTICAS ===
 
@@ -282,6 +323,13 @@ def get_shift_statistics(
     """
     Obtener estadísticas de turnos por usuario en un período
     """
+
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(r in ["admin", "manager"] for r in user_roles)
+
+    # Usuarios solo ven sus propias estadísticas
+    filter_user_id = None if is_supervisor else current_user.id
+
     # Query para contar turnos por usuario y tipo
     stats_query = (
         select(
@@ -304,6 +352,10 @@ def get_shift_statistics(
         )
         .group_by(ShiftSchedule.user_id, User.full_name)
     )
+
+    if filter_user_id is not None:
+        stats_query = stats_query.where(ShiftSchedule.user_id == filter_user_id)
+
     
     results = db.exec(stats_query).all()
     
@@ -329,10 +381,22 @@ def get_shift_statistics(
 def get_shift_alerts(
     department: str = Query("stock", description="Departamento"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user) 
 ):
     """
-    Obtener alertas de turnos sin asignar
+    Obtener alertas de turnos sin asignar.
+    Solo admins/managers ven alertas reales; usuarios ven lista vacía.
     """
-    alerts = ShiftScheduleService.check_unassigned_alerts(db, department)
-    return {"alerts": alerts, "count": len(alerts)}
+    user_roles = get_user_roles_list(current_user.id, db)
+    is_supervisor = any(r in ["admin", "manager"] for r in user_roles)
+
+    # Usuarios regulares no necesitan ver alertas de cobertura del equipo
+    if not is_supervisor:
+        return {"alerts": [], "count": 0}
+
+    try:
+        alerts = ShiftScheduleService.check_unassigned_alerts(db, department)
+        return {"alerts": alerts, "count": len(alerts)}
+    except Exception as e:
+        logger.error(f"Error al calcular alertas: {e}")
+        return {"alerts": [], "count": 0}  # Nunca romper el calendario por esto

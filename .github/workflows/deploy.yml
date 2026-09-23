@@ -30,9 +30,25 @@ jobs:
             git pull origin main
 
             cd /opt/stonefixer
+
+            # ── 1. Build de la imagen con el código nuevo ─────────────────────
+            # Buildeamos ANTES de correr la migración para tener los modelos
+            # actualizados disponibles cuando Alembic los importa.
             docker compose build backend
+
+            # ── 2. Migración de base de datos ──────────────────────────────────
+            # Corre alembic upgrade head en un container temporal (--rm lo elimina
+            # al terminar). Usa la misma imagen que el backend principal, con las
+            # mismas variables de entorno, pero sin levantar el servidor.
+            # Si la migración falla, el deploy se detiene aquí (set -e).
+            echo "⏳ Corriendo migraciones de base de datos..."
+            docker compose run --rm backend alembic upgrade head
+            echo "✅ Migraciones aplicadas"
+
+            # ── 3. Levantar el backend con el nuevo código ─────────────────────
             docker compose up -d backend
 
+            # ── 4. Health check ────────────────────────────────────────────────
             echo "⏳ Verificando health check..."
             for i in $(seq 1 10); do
               if docker compose exec -T backend curl -sf http://localhost:8000/health > /dev/null; then

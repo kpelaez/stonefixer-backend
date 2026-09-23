@@ -32,7 +32,8 @@ def session_fixture():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    SQLModel.metadata.create_all(engine)
+    tables_to_create = [t for t in SQLModel.metadata.tables.values() if t.schema is None]
+    SQLModel.metadata.create_all(engine, tables=tables_to_create)
     
     with Session(engine) as session:
         yield session
@@ -125,7 +126,7 @@ def sample_asset_payload():
         "brand": "Dell",
         "model": "XPS 15 9520",
         "serial_number": "SN123456789",
-        "asset_tag": "NB-2024-001",
+        "asset_tag": "NBK-001",
         "category": "Notebook",
         "status": "available",
         "purchase_price": 1500.00,

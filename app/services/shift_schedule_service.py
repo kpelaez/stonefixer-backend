@@ -13,12 +13,12 @@ class ShiftScheduleService:
     """Lógica de negocio para gestión de turnos"""
     
     @staticmethod
-    def validate_date(target_date: date_type) -> None:
+    def validate_date(target_date: date_type, is_supervisor: bool = False) -> None:
         """Validar que la fecha sea válida para asignación"""
         today = datetime.now().date()
         
         # 1. No asignar en fechas pasadas
-        if target_date < today:
+        if target_date < today and not is_supervisor:
             raise HTTPException(
                 status_code=400,
                 detail="No se pueden asignar turnos en fechas pasadas"

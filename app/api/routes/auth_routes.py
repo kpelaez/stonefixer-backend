@@ -22,12 +22,13 @@ router = APIRouter()
 
 def _set_auth_cookie(response: Response, token: str) -> None:
     """Centraliza la configuración de la cookie de auth."""
+    is_prod = settings.is_production()
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,                          # JS no puede leerla
-        secure=settings.is_production(),        # HTTPS only en producción
-        samesite="lax",                         # Protección CSRF básica
+        secure=is_prod,                          # HTTPS solo en prod
+        samesite="lax",  # cross-origin en dev
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )

@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, create_engine, Session
 from app.config import settings
+from contextlib import contextmanager
 
 def get_engine():
     """Crear el engine de base de datos con configuración apropiada según el tipo de DB"""
@@ -49,3 +50,9 @@ def test_connection():
     except Exception as e:
         print(f"Error de conexión: {e}")
         return False
+
+@contextmanager
+def get_background_session():
+    """Sesión de DB para background tasks y scripts — desacoplada del ciclo de vida HTTP."""
+    with Session(engine) as session:
+        yield session

@@ -1,4 +1,5 @@
-from sqlmodel import SQLModel, Field, Relationship
+from pydantic import field_validator
+from sqlmodel import Column, DateTime, SQLModel, Field, Relationship
 from typing import List, Optional, TYPE_CHECKING
 from datetime import datetime, timezone
 
@@ -16,6 +17,10 @@ class User(UserBase, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
+
+    # Registro auditable de la última vez que el usuario cambió su propia
+    # contraseña (no se usa para bloquear login, solo para trazabilidad)
+    password_changed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
     dni_encrypted: Optional[str] = Field(default=None, description="DNI encriptado con Fernet")
     dni_hash: Optional[str] = Field(default=None, index=True, description="Hash SHA256 del DNI para busquedas")
@@ -47,3 +52,21 @@ class UserDNIUpdate(SQLModel):
     """Schema para actualizar el DNI de un usuario"""
     dni: str
     consent: bool = False
+
+
+
+# NUEVO: self-service, requiere password actual
+class PasswordChange(SQLModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        from app.core.password_policy import validate_password_strength
+        return validate_password_strength(v)
+    
+# NUEVO: reset por admin, sin conocer el password actual — marca must_change_password
+class AdminPasswordReset(SQLModel):
+    new_password: str
+
