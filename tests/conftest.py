@@ -40,7 +40,9 @@ def engine_fixture():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    SQLModel.metadata.create_all(engine)
+    # Excluye tablas de schemas no soportados por SQLite (ej. lakehouse en schema "prod")
+    tables_to_create = [t for t in SQLModel.metadata.tables.values() if t.schema is None]
+    SQLModel.metadata.create_all(engine, tables=tables_to_create)
     return engine
 
 
