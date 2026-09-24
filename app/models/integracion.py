@@ -24,6 +24,6 @@ class IntegracionEjecucion(SQLModel, table=True):
     )
     finalizado_en: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
     estado: str = Field(max_length=20)                      # "ok" | "error"
-    tipo_error: Optional[str] = Field(default=None, max_length=30)  # "credenciales" | "red" | "reporte" | "otro"
+    tipo_error: Optional[str] = Field(default=None, max_length=30)  # "credenciales" | "finnegans" | "datos" | "otro"
     mensaje: Optional[str] = Field(default=None, max_length=500)
     filas: Optional[int] = None
