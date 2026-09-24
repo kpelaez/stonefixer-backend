@@ -10,12 +10,12 @@ no se convierte moneda en el código.
 """
 import logging
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
-
-from sqlalchemy import delete
-from sqlmodel import Session
+from zoneinfo import ZoneInfo
+from sqlalchemy import delete, func
+from sqlmodel import Session, select
 
 from app.config import settings
 from app.models.integracion import IntegracionEjecucion
@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 PROCESO = "inventario_snapshot"
 _REPORTE = "resumenStockPorDeposito"
 _CENTAVOS = Decimal("0.01")
+_TZ_AR = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def ayer_argentina() -> date:
+    """El día cerrado más reciente según la hora de Argentina (el servidor puede estar en UTC)."""
+    return datetime.now(_TZ_AR).date() - timedelta(days=1)
 
 # (deposito_id, deposito, rubro, familia)
 Clave = tuple[int, str, str, str]
@@ -121,4 +127,63 @@ def cargar_snapshot(session: Session, fecha: date) -> dict[str, Any]:
         "unidades": sum(v["unidades"] for v in usd.values()),
         "importe_usd": sum(v["importe"] for v in usd.values()),
         "importe_ars": sum(v["importe"] for v in ars.values()),
+    }
+
+def _totales_por_fecha(session: Session, fechas: list[date]) -> dict[date, dict[str, Decimal]]:
+    filas = session.exec(
+        select(
+            InventarioSnapshot.fecha,
+            func.sum(InventarioSnapshot.unidades),
+            func.sum(InventarioSnapshot.importe_usd),
+            func.sum(InventarioSnapshot.importe_ars),
+        )
+        .where(InventarioSnapshot.fecha.in_(fechas))
+        .group_by(InventarioSnapshot.fecha)
+    ).all()
+    return {f: {"unidades": u, "importe_usd": usd, "importe_ars": ars} for f, u, usd, ars in filas}
+
+
+def _variacion(actual: Decimal, anterior: Decimal) -> dict[str, Any]:
+    dif = actual - anterior
+    return {
+        "absoluta": dif,
+        # Sin base (cierre en 0) no hay % posible: None, no 0 ni infinito.
+        "pct": float((dif / anterior * 100).quantize(_CENTAVOS)) if anterior else None,
+    }
+
+
+def get_resumen(session: Session) -> dict[str, Any] | None:
+    """
+    Última foto cargada vs. cierre del mes anterior a esa foto.
+    Ej.: última foto 23/09 -> se compara contra 31/08.
+    """
+    fecha_actual = session.exec(select(func.max(InventarioSnapshot.fecha))).one()
+    if fecha_actual is None:
+        return None
+
+    fecha_cierre = fecha_actual.replace(day=1) - timedelta(days=1)
+    totales = _totales_por_fecha(session, [fecha_actual, fecha_cierre])
+    actual = totales[fecha_actual]
+    cierre = totales.get(fecha_cierre)  # puede no estar cargado todavía
+
+    ultima = session.exec(
+        select(IntegracionEjecucion)
+        .where(IntegracionEjecucion.proceso == PROCESO)
+        .order_by(IntegracionEjecucion.id.desc())
+        .limit(1)
+    ).first()
+
+    return {
+        "fecha": fecha_actual,
+        "actual": actual,
+        "fecha_cierre_anterior": fecha_cierre,
+        "cierre_anterior": cierre,
+        "variacion": None if cierre is None else {
+            k: _variacion(actual[k], cierre[k]) for k in ("unidades", "importe_usd", "importe_ars")
+        },
+        "ultima_sincronizacion": None if ultima is None else {
+            "estado": ultima.estado,
+            "tipo_error": ultima.tipo_error,
+            "finalizado_en": ultima.finalizado_en,
+        },
     }
