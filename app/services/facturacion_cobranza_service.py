@@ -26,7 +26,12 @@ _KPI_COLUMNS = """
     giro_negocio_pct,
     anio,
     mes,
-    ordenes_compra
+    ordenes_compra,
+    deuda_total,
+    deuda_vencida,
+    deuda_vencida_pct,
+    deuda_no_vencida,
+    deuda_no_vencida_pct
 """
 
 
