@@ -8,7 +8,7 @@ from app.models.overtime import (
     OvertimeEntryCreate, OvertimeEntryRead, OvertimeEntryReview,
     OvertimeBalanceRead, OvertimeStatus, OvertimeType
 )
-from app.api.deps import PermissionChecker, get_current_user
+from app.api.deps import get_current_user
 from app.services.overtime_service import (
     create_overtime_entry, review_entry, cancel_entry,
     get_balance, get_entries
@@ -20,7 +20,7 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MANAGER_ROLES = ["admin", "manager", "inventory_manager"]
+MANAGER_ROLES = ["admin", "manager"]
 
 
 def _is_manager(user: User) -> bool:
@@ -33,7 +33,7 @@ async def create_entry(
     request: Request,
     data: OvertimeEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="create")),
+    current_user: User = Depends(get_current_user),
 ):
     if not _is_manager(current_user) and data.user_id != current_user.id:
         raise HTTPException(
@@ -50,8 +50,13 @@ async def review(
     entry_id: int,
     review_data: OvertimeEntryReview,
     db: Session = Depends(get_db),
-    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="approve")),
+    current_user: User = Depends(get_current_user),
 ):
+    if not _is_manager(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo managers o administradores pueden revisar solicitudes"
+        )
     return review_entry(db, entry_id, review_data, reviewer_user_id=current_user.id)
 
 
@@ -61,9 +66,9 @@ async def cancel(
     request: Request,
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="create")),
+    current_user: User = Depends(get_current_user),
 ):
-    return cancel_entry(db, entry_id, requesting_user_id=current_user.id, is_manager=_is_manager(current_user))
+    return cancel_entry(db, entry_id, requesting_user_id=current_user.id)
 
 
 @router.get("/balance/{user_id}", response_model=OvertimeBalanceRead)
@@ -72,7 +77,7 @@ async def balance(
     request: Request,
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="view")),
+    current_user: User = Depends(get_current_user),
 ):
     if not _is_manager(current_user) and user_id != current_user.id:
         raise HTTPException(
@@ -92,7 +97,7 @@ async def list_entries(
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(PermissionChecker(module_code="horas_extra", action="view")),
+    current_user: User = Depends(get_current_user),
 ):
     effective_user_id = user_id if _is_manager(current_user) else current_user.id
     return get_entries(

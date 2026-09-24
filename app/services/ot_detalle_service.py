@@ -5,8 +5,7 @@ Sirve el OTDetalleModal completo: dado un id de cont_marg_gen, resuelve
 sus tres transacciones relacionadas (OT, factura, consumo) y arma:
   - Datos operativos (paciente/médico/institución) — desde ot_cabecera,
     NO desde cont_marg_gen (ver nota en app/models/ot.py sobre por qué).
-  - Tarjetas y composicion - desde prod.gold_cm_modal_kpis (nivel OT)
-  - "Producto(s) Vendido(s)" - desde prod.gold_cm_modal_productos_vendidos.
+  - "Producto(s) Vendido(s)" — desde comprobante_venta_detalle.
   - "Desglose de Productos Consumidos" — desde consumo_detalle (ya existía).
 
 Cualquiera de las tres relaciones puede faltar (transaccion_id_* es
@@ -16,12 +15,12 @@ alguna hoja.
 """
 from decimal import Decimal
 from typing import Optional
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.models.contribucion_marginal import ContribucionMarginal
 from app.models.consumo import CabeceraConsumo, ConsumoDetalle
-from app.models.ot import OtCabecera
+from app.models.comprobante_venta import ComprobanteVentaCabecera, ComprobanteVentaDetalle
+from app.models.ot import OtCabecera, OtDetalle
 
 
 def _get_consumo(session: Session, transaccion_id_consumo: Optional[int]) -> Optional[dict]:
@@ -60,102 +59,68 @@ def _get_consumo(session: Session, transaccion_id_consumo: Optional[int]) -> Opt
     }
 
 
-_MODAL_KPI_COLUMNS = """
-    nro_ot,
-    venta_bruta,
-    costos_ppp,
-    gastos_logisticos,
-    gastos_comerciales,
-    gastos_comerciales_vendedor,
-    gastos_comerciales_tecnico,
-    contribucion_marginal,
-    porcentaje_costos,
-    porcentaje_gastos_logisticos,
-    porcentaje_gastos_comerciales,
-    porcentaje_margen,
-    cantidad_personas_asignadas,
-    ultima_actualizacion
-"""
-
-
-def _get_resumen_financiero(session: Session, transaccion_id_ot: Optional[int]) -> Optional[dict]:
+def _get_productos_vendidos(
+    session: Session,
+    transaccion_id_factura: Optional[int],
+    transaccion_id_ot: Optional[int],
+) -> Optional[dict]:
     """
-    Tarjetas y composición del modal, a nivel OT, desde prod.gold_cm_modal_kpis.
-    La Gold ya resuelve CM = venta - PPP - logísticos - comerciales y todos
-    los %: acá solo se lee, no se calcula nada.
+    ⚠️ Heurística — confirmar con Martín cuando se pueda.
+
+    Una factura puede agrupar productos de VARIAS OTs distintas en el
+    mismo comprobante. Traer comprobante_venta_detalle filtrando solo
+    por transaccion_id_factura devuelve TODOS esos productos, no solo
+    los de esta OT — de ahí que apareciera un ítem "de otra operación"
+    en el modal.
+
+    Fix: usar ot_detalle.codigo_producto (que sí está scopeado
+    correctamente a transaccion_id_ot) como filtro sobre los productos
+    de la factura. Si la OT no tiene filas en ot_detalle (o no se pasó
+    transaccion_id_ot), se hace fallback al comportamiento anterior sin
+    filtrar — mejor mostrar de más que ocultar de más en ese caso raro.
     """
-    if transaccion_id_ot is None:
+    if transaccion_id_factura is None:
         return None
 
-    row = session.exec(
-        text(f"SELECT {_MODAL_KPI_COLUMNS} FROM prod.gold_cm_modal_kpis WHERE transaccion_id_ot = :ot"),
-        params={"ot": transaccion_id_ot},
+    cabecera = session.exec(
+        select(ComprobanteVentaCabecera).where(
+            ComprobanteVentaCabecera.transaccion_id == transaccion_id_factura
+        )
     ).first()
-    if row is None:
+    if cabecera is None:
         return None
 
-    return {
-        "nro_ot": row.nro_ot,
-        "venta_bruta": row.venta_bruta,
-        "costo": row.costos_ppp,                  # se mantiene el nombre que ya usa el frontend
-        "gastos_logisticos": row.gastos_logisticos,
-        "gastos_comerciales": row.gastos_comerciales,
-        "gastos_comerciales_vendedor": row.gastos_comerciales_vendedor,
-        "gastos_comerciales_tecnico": row.gastos_comerciales_tecnico,
-        "contribucion_marginal": row.contribucion_marginal,
-        "pct_costos": row.porcentaje_costos,
-        "pct_gastos_logisticos": row.porcentaje_gastos_logisticos,
-        "pct_gastos_comerciales": row.porcentaje_gastos_comerciales,
-        "pct_margen": row.porcentaje_margen,
-        "cantidad_personas_asignadas": row.cantidad_personas_asignadas,
-        "ultima_actualizacion": row.ultima_actualizacion,
-    }
-
-
-def _get_productos_vendidos(session: Session, transaccion_id_ot: Optional[int]) -> Optional[dict]:
-    """
-    Productos vendidos de la OT desde prod.gold_cm_modal_productos_vendidos.
-    La vista vincula cada ítem del remito con su línea de factura, así que
-    reemplaza la heurística anterior por codigo_producto.
-    """
-    if transaccion_id_ot is None:
-        return None
-
-    rows = session.exec(
-        text("""
-            SELECT nro_factura, producto, producto_remito,
-                   cantidad_facturada, cantidad_remitida, unidad_venta,
-                   precio_unitario_bruto, importe_bruto_item,
-                   moneda, familia, subfamilia, estado_vinculacion
-            FROM prod.gold_cm_modal_productos_vendidos
-            WHERE transaccion_id_ot = :ot
-            ORDER BY importe_bruto_item DESC NULLS LAST
-        """),
-        params={"ot": transaccion_id_ot},
+    detalle_rows = session.exec(
+        select(ComprobanteVentaDetalle).where(
+            ComprobanteVentaDetalle.transaccion_id == transaccion_id_factura
+        )
     ).all()
-    if not rows:
-        return None
 
-    # Una OT puede tener más de una factura
-    facturas = sorted({r.nro_factura for r in rows if r.nro_factura})
+    if transaccion_id_ot is not None:
+        codigos_ot = {
+            c for c in session.exec(
+                select(OtDetalle.codigo_producto).where(OtDetalle.transaccion_id == transaccion_id_ot)
+            ).all()
+            if c is not None
+        }
+        if codigos_ot:
+            detalle_rows = [r for r in detalle_rows if r.codigo_producto in codigos_ot]
 
     return {
-        "comprobante": ", ".join(facturas),
+        "comprobante": cabecera.comprobante,
+        "cliente": cabecera.cliente,
+        "total": cabecera.total,
         "productos": [
             {
-                "nro_factura": r.nro_factura,
-                # Si el ítem remitido no tiene factura vinculada, se muestra lo remitido
-                "producto": r.producto or r.producto_remito,
-                "cantidad": r.cantidad_facturada if r.cantidad_facturada is not None else r.cantidad_remitida,
-                "unidad_venta": r.unidad_venta,
-                "precio": r.precio_unitario_bruto,
-                "importe": r.importe_bruto_item,
-                "moneda": r.moneda,
-                "familia": r.familia,
-                "subfamilia": r.subfamilia,
-                "estado_vinculacion": r.estado_vinculacion,
+                "producto": row.producto,
+                "cantidad": row.cantidad,
+                "unidad_venta": row.unidad_venta,
+                "precio": row.precio,
+                "importe": row.importe,
+                "familia": row.familia,
+                "subfamilia": row.subfamilia,
             }
-            for r in rows
+            for row in detalle_rows
         ],
     }
 
@@ -182,19 +147,20 @@ def _get_info_operativa(session: Session, transaccion_id_ot: Optional[int], cm: 
 
 
 def get_ot_detalle_completo(session: Session, cont_marg_gen_id: int) -> Optional[dict]:
-    """
-    Punto de entrada del OTDetalleModal. Recibe el id de una fila de
-    cont_marg_gen, resuelve su OT y arma las secciones.
-    Las tarjetas y los productos son de la OT COMPLETA (vistas gold), no
-    de la fila puntual.
-    """
+    """Punto de entrada único del OTDetalleModal — arma las 3 secciones."""
     cm = session.get(ContribucionMarginal, cont_marg_gen_id)
     if cm is None:
         return None
 
     return {
-        "resumen_financiero": _get_resumen_financiero(session, cm.transaccion_id_ot),
+        "resumen_financiero": {
+            "venta_bruta": cm.total_bruto_factura,
+            "costo": cm.precio,
+            "gastos_logisticos": cm.gastos_logisticos,
+            "contribucion_marginal": cm.contribucion_marginal,
+            "pct_margen": cm.porcentaje_margen,
+        },
         "info_operativa": _get_info_operativa(session, cm.transaccion_id_ot, cm),
-        "producto_vendido": _get_productos_vendidos(session, cm.transaccion_id_ot),
+        "producto_vendido": _get_productos_vendidos(session, cm.transaccion_id_factura, cm.transaccion_id_ot),
         "consumo": _get_consumo(session, cm.transaccion_id_consumo),
     }

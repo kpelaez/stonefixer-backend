@@ -128,7 +128,6 @@ def cancel_entry(
     db: Session,
     entry_id: int,
     requesting_user_id: int,
-    is_manager: bool = False,
 ) -> OvertimeEntryRead:
     """
     El empleado cancela su propia solicitud PENDING.
@@ -137,12 +136,6 @@ def cancel_entry(
     entry = db.get(OvertimeEntry, entry_id)
     if not entry:
         raise ResourceNotFoundError("OvertimeEntry", entry_id)
-
-    if entry.user_id != requesting_user_id and not is_manager:
-        raise InvalidOperationError(
-            operation="cancel_entry",
-            reason="Solo podés cancelar tus propias solicitudes"
-        )
 
     if entry.status != OvertimeStatus.PENDING:
         raise InvalidOperationError(

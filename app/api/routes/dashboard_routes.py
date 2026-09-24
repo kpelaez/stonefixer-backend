@@ -77,7 +77,7 @@ async def get_dashboard_metrics(db: Session = Depends(get_db), current_user: Use
     }
 
 @router.get("/recent-activity")
-async def get_recent_activity(db: Session = Depends(get_db), limit: int = 10, current_user: User = Depends(get_current_user)):
+async def get_recent_activity(db: Session = Depends(get_db), limit: int = 10):
     """Obtener actividad reciente del sistema"""
     
     # Últimas asignaciones
@@ -121,7 +121,7 @@ async def get_recent_activity(db: Session = Depends(get_db), limit: int = 10, cu
     return activities[:limit]
 
 @router.get("/alerts")
-async def get_system_alerts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_system_alerts(db: Session = Depends(get_db)):
     """Obtener alertas del sistema"""
     
     alerts = []

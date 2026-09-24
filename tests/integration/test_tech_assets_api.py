@@ -32,8 +32,7 @@ def session_fixture():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    tables_to_create = [t for t in SQLModel.metadata.tables.values() if t.schema is None]
-    SQLModel.metadata.create_all(engine, tables=tables_to_create)
+    SQLModel.metadata.create_all(engine)
     
     with Session(engine) as session:
         yield session
