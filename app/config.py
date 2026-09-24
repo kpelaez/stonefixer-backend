@@ -48,12 +48,6 @@ class Settings(BaseSettings):
     HUMAND_API_KEY: str = ""
     HUMAND_FOLDER_ID: int = 358764
 
-    # Finnegans (ERP) — credenciales solo por variables de entorno
-    FINNEGANS_BASE_URL: str = "https://api.finneg.com/api"
-    FINNEGANS_CLIENT_ID: str = ""
-    FINNEGANS_CLIENT_SECRET: str = ""
-    FINNEGANS_EMPRESA: str = "OMNI34"
-
     # Seguridad DNI
     DNI_ENCRYPTION_KEY: str = ""
 

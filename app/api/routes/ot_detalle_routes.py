@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 import logging
 
-from app.api.deps import PermissionChecker
+from app.api.deps import require_manager
 from app.models.user import User
 from app.db.lakehouse_database import get_lakehouse_db
 from app.services.ot_detalle_service import get_ot_detalle_completo
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @router.get("/{cont_marg_gen_id}")
 def get_ot_detalle(
     cont_marg_gen_id: int,
-    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
+    current_user: User = Depends(require_manager),
     db: Session = Depends(get_lakehouse_db),
 ):
     try:

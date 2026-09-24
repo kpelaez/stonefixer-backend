@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 
-from app.api.deps import PermissionChecker
+from app.api.deps import require_manager
 from app.models.user import User
 from app.db.lakehouse_database import get_lakehouse_db
 from app.services.facturacion_cobranza_service import (
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def get_kpis(
     anio: int | None = Query(default=None, ge=2026),
     mes: int | None = Query(default=None, ge=1, le=12),
-    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
+    current_user: User = Depends(require_manager),
     db: Session = Depends(get_lakehouse_db),
 ):
     try:
@@ -45,7 +45,7 @@ def get_kpis(
 
 @router.get("/kpis/por-mes")
 def get_kpis_por_mes(
-    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
+    current_user: User = Depends(require_manager),
     db: Session = Depends(get_lakehouse_db),
 ):
     try:

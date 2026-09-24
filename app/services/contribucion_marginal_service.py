@@ -22,114 +22,62 @@ Regla de negocio:
     resta manual de total_bruto_nc — la columna ya viene bien calculada
     desde el lakehouse.
 """
-from datetime import date
 from decimal import Decimal
-from typing import Optional, Any
+from typing import Optional
 from sqlmodel import Session
 from sqlalchemy import text
 
 
-class PeriodoInvalido(ValueError):
-    """El rango pedido no se puede resolver con las filas de la vista gold."""
+def _calc_kpis(venta_bruta: Decimal, costos: Decimal, gastos_log: Decimal, margen: Decimal) -> dict:
+    """Calcula los porcentajes derivados, igual que el useMemo del frontend."""
+    venta_bruta = venta_bruta or Decimal(0)
+    costos = costos or Decimal(0)
+    gastos_log = gastos_log or Decimal(0)
+    margen = margen or Decimal(0)
 
-
-def periodo_desde_fechas(fecha_desde: Optional[str], fecha_hasta: Optional[str]) -> Optional[date]:
-    """
-    El frontend manda primer y último día del mes. La vista gold solo tiene
-    filas MES y TOTAL, así que traducimos:
-      - sin fechas               -> None (fila TOTAL)
-      - fechas del mismo mes     -> primer día del mes (fila MES)
-      - fechas de meses distintos -> PeriodoInvalido
-    """
-    if not fecha_desde and not fecha_hasta:
-        return None
-
-    try:
-        desde = date.fromisoformat(fecha_desde) if fecha_desde else None
-        hasta = date.fromisoformat(fecha_hasta) if fecha_hasta else None
-    except ValueError as exc:
-        raise PeriodoInvalido("Formato de fecha inválido, se espera YYYY-MM-DD.") from exc
-
-    ref = desde or hasta
-    otra = hasta or desde
-    if (ref.year, ref.month) != (otra.year, otra.month):
-        raise PeriodoInvalido("Solo se puede consultar un mes completo o el total.")
-
-    return ref.replace(day=1)
-
-
-_GOLD_COLUMNS = """
-    periodo,
-    venta_bruta,
-    costos_ppp,
-    gastos_logisticos,
-    gastos_comerciales,
-    contribucion_marginal,
-    porcentaje_costos,
-    porcentaje_gastos_logisticos,
-    porcentaje_gastos_comerciales,
-    porcentaje_margen,
-    ultima_actualizacion,
-    gastos_comerciales_asignados,
-    gastos_comerciales_sin_asignar,
-    porcentaje_gastos_comerciales_asignados,
-    porcentaje_gastos_comerciales_sin_asignar,
-    gastos_comerciales_vendedor,
-    gastos_comerciales_tecnico,
-    porcentaje_gastos_comerciales_vendedor,
-    porcentaje_gastos_comerciales_tecnico
-"""
-
-
-def _gold_a_respuesta(row: Any) -> dict:
-    """
-    Traduce la fila de la Gold al JSON del endpoint. Las primeras claves
-    mantienen los nombres que YA usa el frontend, para poder desplegar el
-    backend antes que el frontend sin romper la pantalla.
-    """
     return {
-        "venta_bruta": row.venta_bruta,
-        "costos": row.costos_ppp,
-        "gastos_logisticos": row.gastos_logisticos,
-        "margen": row.contribucion_marginal,
-        "pct_costos": row.porcentaje_costos,
-        "pct_gastos": row.porcentaje_gastos_logisticos,
-        "pct_margen": row.porcentaje_margen,
-        "ultima_actualizacion": row.ultima_actualizacion,
-        # Nuevos: gasto comercial
-        "gastos_comerciales": row.gastos_comerciales,
-        "pct_gastos_comerciales": row.porcentaje_gastos_comerciales,
-        "gastos_comerciales_asignados": row.gastos_comerciales_asignados,
-        "gastos_comerciales_sin_asignar": row.gastos_comerciales_sin_asignar,
-        "pct_gc_asignados": row.porcentaje_gastos_comerciales_asignados,      # sobre el total
-        "pct_gc_sin_asignar": row.porcentaje_gastos_comerciales_sin_asignar,  # sobre el total
-        "gastos_comerciales_vendedor": row.gastos_comerciales_vendedor,
-        "gastos_comerciales_tecnico": row.gastos_comerciales_tecnico,
-        "pct_gc_vendedor": row.porcentaje_gastos_comerciales_vendedor,        # sobre lo asignado
-        "pct_gc_tecnico": row.porcentaje_gastos_comerciales_tecnico,          # sobre lo asignado
+        "venta_bruta": venta_bruta,
+        "costos": costos,
+        "gastos_logisticos": gastos_log,
+        "margen": margen,
+        "pct_margen": float(margen / venta_bruta * 100) if venta_bruta else 0.0,
+        "pct_gastos": float(gastos_log / venta_bruta * 100) if venta_bruta else 0.0,
+        "pct_costos": float(costos / venta_bruta * 100) if venta_bruta else 0.0,
     }
 
 
 def get_kpis_periodo(
     session: Session,
-    fecha_desde: Optional[str] = None,
+    fecha_desde: Optional[str] = None,  # 'YYYY-MM-DD'
     fecha_hasta: Optional[str] = None,
-) -> Optional[dict]:
-    """Fila TOTAL o MES de prod.gold_cm_kpis_periodo. None si el mes no existe."""
-    periodo = periodo_desde_fechas(fecha_desde, fecha_hasta)
-
-    if periodo is None:
-        query = f"SELECT {_GOLD_COLUMNS} FROM prod.gold_cm_kpis_periodo WHERE tipo_periodo = 'TOTAL'"
-        params = {}
-    else:
-        query = f"""
-            SELECT {_GOLD_COLUMNS} FROM prod.gold_cm_kpis_periodo
-            WHERE tipo_periodo = 'MES' AND periodo = :periodo
-        """
-        params = {"periodo": periodo}
+) -> dict:
+    """
+    Totales del período completo (o filtrado por rango de fechas si se pasa).
+    Equivalente a 'kpis' cuando selectedMes === 'todos' en el frontend actual.
+    """
+    query = f"""
+        SELECT
+            COALESCE(SUM(total_bruto_factura), 0) AS venta_bruta,
+            COALESCE(SUM(precio), 0) AS costos,
+            COALESCE(SUM(gastos_logisticos), 0) AS gastos_logisticos,
+            COALESCE(SUM(contribucion_marginal), 0) AS margen,
+            MAX(fecha_carga) AS ultima_actualizacion
+        FROM prod.cont_marg_gen
+        WHERE 1=1
+        {"AND fecha_factura >= :fecha_desde" if fecha_desde else ""}
+        {"AND fecha_factura <= :fecha_hasta" if fecha_hasta else ""}
+    """
+    params = {}
+    if fecha_desde:
+        params["fecha_desde"] = fecha_desde
+    if fecha_hasta:
+        params["fecha_hasta"] = fecha_hasta
 
     row = session.exec(text(query), params=params).first()
-    return _gold_a_respuesta(row) if row is not None else None
+
+    kpis = _calc_kpis(row.venta_bruta, row.costos, row.gastos_logisticos, row.margen)
+    kpis["ultima_actualizacion"] = row.ultima_actualizacion
+    return kpis
 
 
 _ORDENABLES = {
@@ -238,12 +186,31 @@ def get_ranking_clientes(
 
 
 def get_kpis_por_mes(session: Session, meses: int = 12) -> list[dict]:
-    """Últimos N meses de la Gold (filas MES), más reciente primero."""
+    """
+    Breakdown mes a mes (últimos N meses), agrupado por fecha_factura.
+    Equivalente a lo que arma mesesDisponibles + filtro por selectedMes
+    en el frontend actual, pero resuelto en una sola query en vez de
+    filtrar en el cliente.
+    """
     query = f"""
-        SELECT {_GOLD_COLUMNS} FROM prod.gold_cm_kpis_periodo
-        WHERE tipo_periodo = 'MES'
-        ORDER BY periodo DESC
+        SELECT
+            TO_CHAR(fecha_factura, 'YYYY-MM') AS mes_anio,
+            COALESCE(SUM(total_bruto_factura), 0) AS venta_bruta,
+            COALESCE(SUM(precio), 0) AS costos,
+            COALESCE(SUM(gastos_logisticos), 0) AS gastos_logisticos,
+            COALESCE(SUM(contribucion_marginal), 0) AS margen
+        FROM prod.cont_marg_gen
+        WHERE fecha_factura IS NOT NULL
+        GROUP BY TO_CHAR(fecha_factura, 'YYYY-MM')
+        ORDER BY mes_anio DESC
         LIMIT :meses
     """
     rows = session.exec(text(query), params={"meses": meses}).all()
-    return [{"mes_anio": r.periodo.strftime("%Y-%m"), **_gold_a_respuesta(r)} for r in rows]
+
+    return [
+        {
+            "mes_anio": row.mes_anio,
+            **_calc_kpis(row.venta_bruta, row.costos, row.gastos_logisticos, row.margen),
+        }
+        for row in rows
+    ]
