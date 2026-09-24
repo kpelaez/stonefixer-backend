@@ -17,7 +17,7 @@ from app.models.tech_asset import (
 )
 from app.models.user import User
 
-from app.api.deps import get_current_user, RoleChecker, require_inventory_manager, require_admin
+from app.api.deps import PermissionChecker, get_current_user, RoleChecker, require_inventory_manager, require_admin
 from app.schemas.common import PaginatedResponse
 from app.services.label_export_service import generate_label_export
 from app.services.tech_asset_service import create_tech_asset, generate_asset_tag, get_tech_assets, get_tech_asset, update_tech_asset, delete_tech_asset, get_tech_assets_count, get_asset_statistics, get_warranty_expiring_assets
@@ -66,7 +66,7 @@ async def get_tech_assets_endpoint(
     category: Optional[AssetCategory] = Query(default=None, description="Filtrar por categoría"),
     location: Optional[str] = Query(default=None, description="Filtrar por ubicación"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view")),
 ):
     """
     Obtener lista de activos paginada tecnologicos con paginacion
@@ -110,7 +110,7 @@ async def get_tech_assets_endpoint(
 @router.get("/statistics/overview")
 async def get_asset_statistics_endpoint(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
     """Obtener estadísticas generales de activos tecnológicos"""
     try:
@@ -124,7 +124,7 @@ async def get_asset_statistics_endpoint(
 async def get_warranty_expiring_endpoint(
     days_ahead: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
     """Obtener activos con garantía por vencer"""
     try:
@@ -169,7 +169,7 @@ async def get_tech_asset_endpoint(
     request: Request,
     asset_id: int, 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker(module_code="inventario", action="view"))
 ):
 
     """
@@ -260,7 +260,7 @@ async def delete_asset_endpoint(
         )
 
 @router.get("/{asset_id}/maintenance-history")
-async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_asset_maintenance_history_endpoint(asset_id: int, current_user: User = Depends(PermissionChecker(module_code="inventario", action="view")), db: Session = Depends(get_db)):
     """Obtener historial de mantenimiento del activo"""
     from app.services.asset_maintenance_service import get_asset_maintenance_history
 
@@ -328,13 +328,3 @@ async def generate_asset_tag_endpoint(
             detail="Error al generar el tag del activo"
         )
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] Error generando tag: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al generar el tag del activo"
-        )

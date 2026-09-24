@@ -19,6 +19,9 @@ from app.models.asset_maintenance import AssetMaintenance
 from app.models.role import Role
 from app.models.user import User
 from app.models.overtime import OvertimeEntry
+from app.models.rbac import RoleDB, Module, Permission, RolePermission
+from app.models.inventario import InventarioSnapshot
+from app.models.integracion import IntegracionEjecucion
 
 from sqlmodel import SQLModel
 
@@ -37,6 +40,7 @@ def get_url() -> str:
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     context.configure(
+        include_object=include_object,
         url=get_url(),
         target_metadata=target_metadata,
         literal_binds=True,
@@ -58,9 +62,20 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(include_object=include_object, connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+
+def include_object(object, name, type_, reflected, compare_to):
+    """
+    No proponer DROP de tablas que existen en la base pero no en los modelos
+    importados arriba (ej. tablas de otras ramas o features en curso).
+    Borrar una tabla tiene que ser una decisión explícita, escrita a mano en
+    una migración, nunca un efecto del autogenerate.
+    """
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+    return True
 
 
 # Print explícito para que SIEMPRE veas a qué base te estás por conectar

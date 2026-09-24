@@ -21,5 +21,10 @@ class UserRole(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", primary_key=True)
     role: str = Field(primary_key=True)
 
+    # NUEVO: FK real hacia la tabla roles nueva,
+    # nullable y sin tocar `role` (string legacy). Convive con el
+    # sistema viejo hasta que migremos los datos reales.
+    role_id: Optional[int] = Field(default=None, foreign_key="roles.id")
+
     # Relación hacia User
     user: Optional["User"] = Relationship(back_populates="roles")

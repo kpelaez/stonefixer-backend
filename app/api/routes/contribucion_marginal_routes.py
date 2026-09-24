@@ -12,15 +12,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 import logging
 
-from app.api.deps import require_manager
 from app.models.user import User
 from app.db.lakehouse_database import get_lakehouse_db
 from app.services.contribucion_marginal_service import (
+    PeriodoInvalido,
     get_kpis_periodo,
     get_kpis_por_mes,
     get_registros as get_registros_svc,
     get_ranking_clientes as get_ranking_clientes_svc,
 )
+from app.api.deps import PermissionChecker
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 def get_contribucion_marginal_kpis(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """
@@ -41,13 +42,19 @@ def get_contribucion_marginal_kpis(
       - fecha_hasta: 'YYYY-MM-DD'
     """
     try:
-        return get_kpis_periodo(db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+        kpis = get_kpis_periodo(db, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+    except PeriodoInvalido as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error obteniendo KPIs de Contribución Marginal: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Error al consultar el lakehouse. Intentá de nuevo en unos minutos.",
         )
+
+    if kpis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay datos para ese período.")
+    return kpis
 
 
 @router.get("/registros")
@@ -60,7 +67,7 @@ def get_registros(
     order_dir: str = "desc",
     limit: int = 100,
     offset: int = 0,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Listado fila por fila para la tabla de OTs del dashboard de CM."""
@@ -83,7 +90,7 @@ def get_ranking_clientes(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
     limit: int = 20,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Top clientes por contribución marginal, para el gráfico de ranking."""
@@ -98,7 +105,7 @@ def get_ranking_clientes(
 @router.get("/kpis/por-mes")
 def get_contribucion_marginal_kpis_por_mes(
     meses: int = 12,
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(PermissionChecker(module_code="dashboards", action="view")),
     db: Session = Depends(get_lakehouse_db),
 ):
     """Breakdown mes a mes (últimos N meses), para gráficos de tendencia."""
